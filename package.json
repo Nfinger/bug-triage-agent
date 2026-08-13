@@ -1,0 +1,27 @@
+{
+	"name": "radial-epoch",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"dev": "vite dev",
+		"build": "vite build",
+		"start": "node dist/server.mjs",
+		"check:types": "tsc --noEmit"
+	},
+	"dependencies": {
+		"@flue/github": "^2.0.3",
+		"@flue/runtime": "^2.0.3",
+		"@flue/slack": "^2.0.3",
+		"@octokit/rest": "^22.0.1",
+		"@slack/web-api": "^8.0.0",
+		"hono": "^4.12.32",
+		"valibot": "^1.4.2"
+	},
+	"devDependencies": {
+		"@flue/cli": "^2.0.3",
+		"@flue/vite": "^2.0.3",
+		"@types/node": "^22.10.10",
+		"typescript": "^7.0.2",
+		"vite": "^8.0.14"
+	}
+}
