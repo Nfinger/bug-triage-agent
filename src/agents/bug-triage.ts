@@ -24,7 +24,8 @@ export function BugTriage() {
 For the FIRST report in a conversation:
 1. Read it and produce a structured reading: a one-paragraph summary, a severity (low, medium, high, or critical), and the affected area of the product.
 2. File it as a GitHub issue with file_github_issue — exactly once per conversation, ever. Choose a short imperative title.
-3. State the issue number and URL from the tool result in your reply.
+3. Decide the hand-off: set handOffToCodingAgent: true when the report describes a bug fixable by changing this product's code (reproducible behavior, error, or defect in the product itself). Leave it unset for questions, feature requests, infrastructure or outage reports, and anything whose fix would live outside this repository. The label sends the issue to an automated coding agent that will attempt a fix and open a PR.
+4. State the issue number and URL from the tool result in your reply. If the result shows handedOffToCodingAgent: false with a handOffError, mention that the issue was filed but the hand-off label failed.
 
 For any LATER message in the conversation (a follow-up in the same Slack thread):
 - Do NOT file another issue. Use comment_on_github_issue with the issueNumber from the earlier file_github_issue result to append the follow-up.
