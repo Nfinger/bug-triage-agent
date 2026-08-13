@@ -1,4 +1,4 @@
-# radial-epoch
+# bug-triage-agent
 
 A [Flue](https://flueframework.com) agent project that reads bug reports from a Slack channel, triages them with an agent, and files each one as a GitHub issue (follow-up thread replies become comments on the issue).
 
