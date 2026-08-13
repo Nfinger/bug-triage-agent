@@ -27,21 +27,13 @@ Then add a model provider API key to `.env` (any [provider Pi supports](https://
 
 Point `GITHUB_REPO` at a sandbox repository first to try the flow end to end before switching to the real tracker.
 
-## Talk to your agent
-
-```sh
-npx flue run src/agents/hello.ts --message "Say hello!"
-```
-
-Conversations are durable — pass `--id <id>` to continue one.
-
 ## Develop
 
 ```sh
 npm run dev
 ```
 
-The Hello agent is served at `http://localhost:5173/agents/hello` — see `src/app.ts` for the route map and an example request.
+The `BugTriage` agent (`src/agents/bug-triage.ts`) is dispatched by the Slack channel — see `src/app.ts` for the route map.
 
 ## Deploy
 
