@@ -6,7 +6,6 @@
 	// One uniquely tagged migration per Flue agent class (append-only — never
 	// rewrite deployed entries), plus the shared Sandbox container class.
 	"migrations": [
-		{ "tag": "flue-class-FlueHelloAgent", "new_sqlite_classes": ["FlueHelloAgent"] },
 		{ "tag": "flue-class-FlueBugTriageAgent", "new_sqlite_classes": ["FlueBugTriageAgent"] },
 		{ "tag": "flue-class-FlueCodingAgent", "new_sqlite_classes": ["FlueCodingAgent"] },
 		{ "tag": "sandbox-v1", "new_sqlite_classes": ["Sandbox"] }

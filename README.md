@@ -45,14 +45,6 @@ Requirements: a Cloudflare account with Workers Paid (Containers) enabled, and `
 
 Point `GITHUB_REPO` at a sandbox repository first to try the flow end to end before switching to the real tracker. To trigger the coding agent manually, apply the `agent-fix` label to any issue.
 
-## Talk to your agent
-
-```sh
-npx flue run src/agents/hello.ts --message "Say hello!"
-```
-
-Conversations are durable — pass `--id <id>` to continue one.
-
 ## Develop
 
 ```sh
@@ -60,7 +52,7 @@ Conversations are durable — pass `--id <id>` to continue one.
 npm run dev
 ```
 
-Runs the Worker locally (with a local sandbox container — Docker required). The prep script snapshots the target repo's `pnpm-lock.yaml` into `container-context/` so the sandbox image build pre-fetches the entire dependency store — coding-agent runs then install in seconds instead of minutes. Re-run it (and rebuild) when the target repo's lockfile changes materially; skipping it just means cold installs. The Hello agent is served at `http://localhost:5173/agents/hello` — see `src/app.ts` for the route map and an example request.
+Runs the Worker locally (with a local sandbox container — Docker required). The prep script snapshots the target repo's `pnpm-lock.yaml` into `container-context/` so the sandbox image build pre-fetches the entire dependency store — coding-agent runs then install in seconds instead of minutes. Re-run it (and rebuild) when the target repo's lockfile changes materially; skipping it just means cold installs. Both agents are dispatched by their channels (`src/agents/bug-triage.ts` by Slack, `src/agents/coding.ts` by GitHub) — see `src/app.ts` for the route map.
 
 ## Deploy
 
