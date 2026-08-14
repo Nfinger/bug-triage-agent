@@ -37,12 +37,13 @@ export function setupWorkspace(ref: CodingIssueRef) {
 			'clone is fetched and reused. Returns the repo path, work branch, and default branch.',
 		input: v.object({}),
 		harness: true,
-		async run({ harness }): Promise<{ output: SetupWorkspaceOutput }> {
+		async run({ harness, log }): Promise<{ output: SetupWorkspaceOutput }> {
 			const { owner, repo, issueNumber } = ref;
 			const token = process.env.GITHUB_TOKEN;
 			if (!token) return { output: { ok: false, error: 'GITHUB_TOKEN is not configured' } };
 			const branch = workBranch(issueNumber);
 			const path = '/workspace/repo';
+			const startedAt = Date.now();
 			try {
 				// Credentials live in git's store outside the working tree — never
 				// in the clone URL, shell history inside the repo, or any file that
@@ -107,8 +108,21 @@ export function setupWorkspace(ref: CodingIssueRef) {
 							? 'ok'
 							: `failed: ${installed.stderr.slice(-500)}`;
 				}
+				log.info('workspace ready', {
+					repo: `${owner}/${repo}`,
+					issueNumber,
+					branch,
+					install,
+					durationMs: Date.now() - startedAt,
+				});
 				return { output: { ok: true, path, branch, defaultBranch, install } };
 			} catch (error) {
+				log.error('workspace setup failed', {
+					repo: `${owner}/${repo}`,
+					issueNumber,
+					error: errorOutput(error).error,
+					durationMs: Date.now() - startedAt,
+				});
 				return { output: errorOutput(error) };
 			}
 		},
@@ -137,7 +151,7 @@ export function openPullRequest(ref: CodingIssueRef) {
 				v.description('What was changed and how it was validated (checks run, results).'),
 			),
 		}),
-		async run({ data }) {
+		async run({ data, log }) {
 			const { owner, repo, issueNumber } = ref;
 			const branch = workBranch(issueNumber);
 			try {
@@ -149,6 +163,7 @@ export function openPullRequest(ref: CodingIssueRef) {
 				});
 				if (existing.data.length > 0) {
 					const pr = existing.data[0];
+					log.info('pull request already open', { repo: `${owner}/${repo}`, issueNumber, prNumber: pr.number });
 					return {
 						output: { ok: true as const, prNumber: pr.number, url: pr.html_url, alreadyExisted: true },
 					};
@@ -162,6 +177,11 @@ export function openPullRequest(ref: CodingIssueRef) {
 					base: repoInfo.data.default_branch,
 					body: `${data.summary}\n\nFixes #${issueNumber}`,
 				});
+				log.info('pull request opened', {
+					repo: `${owner}/${repo}`,
+					issueNumber,
+					prNumber: created.data.number,
+				});
 				return {
 					output: {
 						ok: true as const,
@@ -171,6 +191,11 @@ export function openPullRequest(ref: CodingIssueRef) {
 					},
 				};
 			} catch (error) {
+				log.error('pull request open failed', {
+					repo: `${owner}/${repo}`,
+					issueNumber,
+					error: errorOutput(error).error,
+				});
 				return { output: errorOutput(error) };
 			}
 		},
