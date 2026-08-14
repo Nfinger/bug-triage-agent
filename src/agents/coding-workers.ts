@@ -12,10 +12,16 @@ import { env } from 'cloudflare:workers';
 
 // Shared by the orchestrator and both workers. `wrangler types` cannot see
 // the Sandbox class behind the package re-export, so the namespace needs a
-// cast to getSandbox's expected parameter type.
+// cast to getSandbox's expected parameter type. Coding runs have a three-hour
+// durability budget; keep their container from hitting Sandbox's default
+// 10-minute inactivity shutdown during a long dependency install or build.
 export function attachIssueSandbox(sandboxKey: string): void {
 	const namespace = env.Sandbox as unknown as Parameters<typeof getSandbox>[0];
-	useSandbox(cloudflareSandbox(getSandbox(namespace, sandboxKey)), { cwd: '/workspace' });
+	const sandbox = getSandbox(namespace, sandboxKey, {
+		normalizeId: true,
+		sleepAfter: '3h',
+	});
+	useSandbox(cloudflareSandbox(sandbox), { cwd: '/workspace' });
 }
 
 export function investigator(sandboxKey: string) {
