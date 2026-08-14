@@ -1,6 +1,6 @@
 # Coding-agent sandbox image. The base tag MUST match the installed
 # @cloudflare/sandbox npm package version (see package.json).
-FROM docker.io/cloudflare/sandbox:0.11.0
+FROM docker.io/cloudflare/sandbox:0.12.7
 
 # Toolchain the coding agent needs on every run: pnpm (pinned to the target
 # repo's packageManager) with a fixed store path shared by all checkouts.
