@@ -80,6 +80,10 @@ npx wrangler deploy
 
 First deploy: run `npx wrangler login`, then set each secret with `npx wrangler secret put <NAME>` (`OPENROUTER_API_KEY`, `SLACK_SIGNING_SECRET`, `SLACK_BUG_CHANNEL_ID`, `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_WEBHOOK_SECRET`, and optionally `CODING_AGENT_LABEL`, `ARCH_REVIEW_ENABLED`, `ARCH_REVIEW_LABEL`, `ARCH_REVIEW_REPO`). The container image (`Dockerfile`, pinned to the installed `@cloudflare/sandbox` version) is built and pushed as part of the deploy. Point the Slack and GitHub webhook URLs at the deployed Worker.
 
+### Continuous deploy
+
+[`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) typechecks, builds, and runs `wrangler deploy` automatically on every push to `main` — in practice, every merged PR. It needs two repository secrets (**Settings → Secrets and variables → Actions**), separate from the `wrangler secret put` values above: `CLOUDFLARE_API_TOKEN` (scoped with the "Edit Cloudflare Workers" template) and `CLOUDFLARE_ACCOUNT_ID`.
+
 ## Learn more
 
 - [Flue docs](https://flueframework.com/docs/) — or `npx flue docs` from the terminal.
