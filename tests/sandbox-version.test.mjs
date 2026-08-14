@@ -28,9 +28,9 @@ test('issue sandbox lifetime matches the coding agent durability budget', () => 
 	assert.equal(sandboxSleepMs, durabilityMs);
 });
 
-test('optional dependency install failures do not fail workspace setup', () => {
+test('optional dependency install has an independent caller deadline', () => {
 	assert.match(
 		githubPrTools,
-		/if \(await harness\.sandbox\.exists\(`\$\{path\}\/pnpm-lock\.yaml`\)\) \{\s*try \{[\s\S]*?harness\.sandbox\.exec\([\s\S]*?catch \(error\) \{[\s\S]*?install = `failed:/,
+		/await withDeadline\(\s*harness\.sandbox\.exec\([\s\S]*?execOptions\(180_000\)[\s\S]*?195_000,[\s\S]*?catch \(error\) \{[\s\S]*?install = `failed:/,
 	);
 });
