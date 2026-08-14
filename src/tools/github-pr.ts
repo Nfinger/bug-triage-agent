@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { client } from '../channels/github-client.ts';
+import { withDeadline } from './deadline.ts';
 
 /** The issue a coding-agent conversation is working on. */
 export interface CodingIssueRef {
@@ -107,9 +108,13 @@ export function setupWorkspace(ref: CodingIssueRef) {
 				let install = 'skipped (no pnpm-lock.yaml)';
 				if (await harness.sandbox.exists(`${path}/pnpm-lock.yaml`)) {
 					try {
-						const installed = await harness.sandbox.exec(
-							`cd ${path} && CI=1 pnpm install --prefer-offline --frozen-lockfile --reporter=silent`,
-							execOptions(180_000),
+						const installed = await withDeadline(
+							harness.sandbox.exec(
+								`cd ${path} && CI=1 pnpm install --prefer-offline --frozen-lockfile --reporter=silent`,
+								execOptions(180_000),
+							),
+							195_000,
+							'dependency install',
 						);
 						install =
 							installed.exitCode === 0
