@@ -1,5 +1,5 @@
 {
-	"name": "radial-epoch",
+	"name": "bug-triage-agent",
 	"private": true,
 	"type": "module",
 	"scripts": {

@@ -1,14 +1,22 @@
 {
 	"$schema": "./node_modules/wrangler/config-schema.json",
-	"name": "radial-epoch",
+	"name": "bug-triage-agent",
 	"compatibility_date": "2026-06-01",
 	"compatibility_flags": ["nodejs_compat"],
 	// One uniquely tagged migration per Flue agent class (append-only — never
 	// rewrite deployed entries), plus the shared Sandbox container class.
 	"migrations": [
+		// This worker previously ran a Hello agent (a stray deploy from before
+		// the project's real Cloudflare setup landed on main). Its creation and
+		// deletion both stay in this history — wrangler validates a
+		// deleted_classes entry against the local migration history, not live
+		// server state, so the create entry must remain even though the class
+		// no longer exists in the bundle.
+		{ "tag": "flue-class-FlueHelloAgent", "new_sqlite_classes": ["FlueHelloAgent"] },
 		{ "tag": "flue-class-FlueBugTriageAgent", "new_sqlite_classes": ["FlueBugTriageAgent"] },
 		{ "tag": "flue-class-FlueCodingAgent", "new_sqlite_classes": ["FlueCodingAgent"] },
-		{ "tag": "sandbox-v1", "new_sqlite_classes": ["Sandbox"] }
+		{ "tag": "sandbox-v1", "new_sqlite_classes": ["Sandbox"] },
+		{ "tag": "delete-flue-hello-agent", "deleted_classes": ["FlueHelloAgent"] }
 	],
 	"durable_objects": {
 		"bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
