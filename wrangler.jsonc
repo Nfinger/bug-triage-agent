@@ -16,8 +16,15 @@
 		{ "tag": "flue-class-FlueBugTriageAgent", "new_sqlite_classes": ["FlueBugTriageAgent"] },
 		{ "tag": "flue-class-FlueCodingAgent", "new_sqlite_classes": ["FlueCodingAgent"] },
 		{ "tag": "sandbox-v1", "new_sqlite_classes": ["Sandbox"] },
-		{ "tag": "delete-flue-hello-agent", "deleted_classes": ["FlueHelloAgent"] }
+		{ "tag": "delete-flue-hello-agent", "deleted_classes": ["FlueHelloAgent"] },
+		{ "tag": "flue-class-FlueArchitectureReviewAgent", "new_sqlite_classes": ["FlueArchitectureReviewAgent"] }
 	],
+	// Weekly architecture review: Friday 09:00 UTC. Cloudflare evaluates cron
+	// expressions in UTC only — there is no timezone option. The fire arrives in
+	// src/cloudflare.ts and dispatches one ArchitectureReview run.
+	"triggers": {
+		"crons": ["0 9 * * 5"]
+	},
 	"durable_objects": {
 		"bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
 	},

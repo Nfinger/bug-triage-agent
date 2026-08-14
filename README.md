@@ -18,6 +18,8 @@ Slack bug channel → BugTriage agent → GitHub issue (+ agent-fix label)
               branch + passing checks → pull request → comment on issue
 ```
 
+Separately, a [weekly architecture review](#weekly-architecture-review) runs on a Friday cron: a scheduled agent reviews one aspect of the system and files its findings as a GitHub issue.
+
 ## Setup
 
 ```sh
@@ -54,6 +56,20 @@ npm run dev
 
 Runs the Worker locally (with a local sandbox container — Docker required). The prep script snapshots the target repo's `pnpm-lock.yaml` into `container-context/` so the sandbox image build pre-fetches the entire dependency store — coding-agent runs then install in seconds instead of minutes. Re-run it (and rebuild) when the target repo's lockfile changes materially; skipping it just means cold installs. Both agents are dispatched by their channels (`src/agents/bug-triage.ts` by Slack, `src/agents/coding.ts` by GitHub) — see `src/app.ts` for the route map.
 
+## Weekly architecture review
+
+Every Friday at 09:00 UTC, the `ArchitectureReview` agent reviews **one** aspect of this system and files a report as a GitHub issue titled `Architecture review: <focus area> (<date>)`, labelled `ARCH_REVIEW_LABEL` (default `architecture-review`). Each report carries 3–7 findings — improvements, hardening opportunities, and technical debt — ranked by severity, each with `path:line` evidence and a proposed next step.
+
+How it flows: a Cloudflare Cron Trigger (`triggers.crons` in `wrangler.jsonc`) fires → `scheduled()` in `src/cloudflare.ts` calls `dispatchArchitectureReview` (`src/schedules/architecture-review.ts`), which picks this week's focus area from the rotation in `src/review/focus-areas.ts` and dispatches a signal to the agent (`src/agents/architecture-review.ts`), one conversation per run keyed by the date → the agent reads the repository through the read-only tools in `src/tools/repo-inspect.ts`, checks what earlier reports already said, and files the week's report with `file_architecture_report_issue` (`src/tools/architecture-report.ts`).
+
+The focus area is **not** chosen by the model. It rotates deterministically by week over eight areas — ingress & channel security, agent design & prompts, outbound tools & external calls, persistence & durability, configuration & secrets, dependencies & build, observability & operability, scheduled & background work — so coverage spreads across the system and next week's area is predictable. The agent is dispatch-only: no route is mounted for it, so a review can only be started by the cron.
+
+Changing when it runs means editing `triggers.crons` in `wrangler.jsonc` and redeploying — Cloudflare evaluates cron expressions in **UTC only**, with no timezone option, so the run's date and rotation are derived in UTC too. Adding the agent also added a `flue-class-FlueArchitectureReviewAgent` migration entry there (append-only — never rewrite deployed entries).
+
+Configuration (see `.env.example`): `ARCH_REVIEW_ENABLED`, `ARCH_REVIEW_LABEL`, and `ARCH_REVIEW_REPO` (the repo under review; defaults to `GITHUB_REPO`). `GITHUB_TOKEN` already carries the contents-read the review needs for the coding agent's sake. Setting `ARCH_REVIEW_ENABLED=false` makes a fire a no-op without removing the trigger.
+
+Two things to know about scheduled runs: Cloudflare delivers them **at-least-once**, and a run's conversation ID and idempotency key are both the fire's date, so a repeated fire for the same Friday is a no-op rather than a second issue. Local `npm run dev` does not fire cron triggers — to exercise a run locally, call `dispatchArchitectureReview(new Date())` directly.
+
 ## Deploy
 
 ```sh
@@ -62,7 +78,7 @@ npm run build
 npx wrangler deploy
 ```
 
-First deploy: run `npx wrangler login`, then set each secret with `npx wrangler secret put <NAME>` (`OPENROUTER_API_KEY`, `SLACK_SIGNING_SECRET`, `SLACK_BUG_CHANNEL_ID`, `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_WEBHOOK_SECRET`, and optionally `CODING_AGENT_LABEL`). The container image (`Dockerfile`, pinned to the installed `@cloudflare/sandbox` version) is built and pushed as part of the deploy. Point the Slack and GitHub webhook URLs at the deployed Worker.
+First deploy: run `npx wrangler login`, then set each secret with `npx wrangler secret put <NAME>` (`OPENROUTER_API_KEY`, `SLACK_SIGNING_SECRET`, `SLACK_BUG_CHANNEL_ID`, `GITHUB_TOKEN`, `GITHUB_REPO`, `GITHUB_WEBHOOK_SECRET`, and optionally `CODING_AGENT_LABEL`, `ARCH_REVIEW_ENABLED`, `ARCH_REVIEW_LABEL`, `ARCH_REVIEW_REPO`). The container image (`Dockerfile`, pinned to the installed `@cloudflare/sandbox` version) is built and pushed as part of the deploy. Point the Slack and GitHub webhook URLs at the deployed Worker.
 
 ## Learn more
 
