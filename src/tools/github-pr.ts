@@ -106,14 +106,18 @@ export function setupWorkspace(ref: CodingIssueRef) {
 				// investigate or retry the install itself.
 				let install = 'skipped (no pnpm-lock.yaml)';
 				if (await harness.sandbox.exists(`${path}/pnpm-lock.yaml`)) {
-					const installed = await harness.sandbox.exec(
-						`cd ${path} && pnpm install --prefer-offline --frozen-lockfile`,
-						execOptions(900_000),
-					);
-					install =
-						installed.exitCode === 0
-							? 'ok'
-							: `failed: ${installed.stderr.slice(-500)}`;
+					try {
+						const installed = await harness.sandbox.exec(
+							`cd ${path} && CI=1 pnpm install --prefer-offline --frozen-lockfile --reporter=silent`,
+							execOptions(180_000),
+						);
+						install =
+							installed.exitCode === 0
+								? 'ok'
+								: `failed: ${installed.stderr.slice(-500)}`;
+					} catch (error) {
+						install = `failed: ${errorOutput(error).error}`;
+					}
 				}
 				log.info('workspace ready', {
 					repo: `${owner}/${repo}`,

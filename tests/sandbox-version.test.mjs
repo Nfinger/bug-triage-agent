@@ -6,6 +6,7 @@ const packageJson = JSON.parse(await readFile(new URL('../package.json', import.
 const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
 const codingAgent = await readFile(new URL('../src/agents/coding.ts', import.meta.url), 'utf8');
 const codingWorkers = await readFile(new URL('../src/agents/coding-workers.ts', import.meta.url), 'utf8');
+const githubPrTools = await readFile(new URL('../src/tools/github-pr.ts', import.meta.url), 'utf8');
 
 test('Sandbox SDK and container base image use the same exact version', () => {
 	const sdkVersion = packageJson.dependencies['@cloudflare/sandbox'];
@@ -25,4 +26,11 @@ test('issue sandbox lifetime matches the coding agent durability budget', () => 
 	const durabilityMs = Number(durability[1].replaceAll('_', ''));
 	const sandboxSleepMs = Number(sleepAfter[1]) * 60 * 60 * 1000;
 	assert.equal(sandboxSleepMs, durabilityMs);
+});
+
+test('optional dependency install failures do not fail workspace setup', () => {
+	assert.match(
+		githubPrTools,
+		/if \(await harness\.sandbox\.exists\(`\$\{path\}\/pnpm-lock\.yaml`\)\) \{\s*try \{[\s\S]*?harness\.sandbox\.exec\([\s\S]*?catch \(error\) \{[\s\S]*?install = `failed:/,
+	);
 });
