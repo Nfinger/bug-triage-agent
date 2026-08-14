@@ -1,6 +1,9 @@
 import { Hono } from 'hono';
 import { channel as github } from './channels/github.ts';
 import { channel as slack } from './channels/slack.ts';
+import { setupObservability } from './observability.ts';
+
+setupObservability();
 
 const app = new Hono();
 

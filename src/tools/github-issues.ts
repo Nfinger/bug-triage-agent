@@ -55,7 +55,7 @@ export function fileGithubIssue(ref?: SlackSourceRef) {
 			details: v.optional(v.string()),
 			handOffToCodingAgent: v.optional(v.boolean()),
 		}),
-		async run({ data }) {
+		async run({ data, log }) {
 			try {
 				const { owner, repo } = targetRepo();
 				const body = [
@@ -74,6 +74,12 @@ export function fileGithubIssue(ref?: SlackSourceRef) {
 					body,
 				});
 				const created = { issueNumber: result.data.number, url: result.data.html_url };
+				log.info('github issue filed', {
+					repo: `${owner}/${repo}`,
+					issueNumber: result.data.number,
+					severity: data.severity,
+					handOffToCodingAgent: data.handOffToCodingAgent ?? false,
+				});
 				if (!data.handOffToCodingAgent) {
 					return { output: { ok: true, ...created } };
 				}
@@ -88,8 +94,13 @@ export function fileGithubIssue(ref?: SlackSourceRef) {
 						issue_number: result.data.number,
 						labels: [codingAgentLabel()],
 					});
+					log.info('coding agent handed off', { issueNumber: result.data.number });
 					return { output: { ok: true, ...created, handedOffToCodingAgent: true } };
 				} catch (labelError) {
+					log.error('coding agent hand-off failed', {
+						issueNumber: result.data.number,
+						error: errorOutput(labelError).error,
+					});
 					return {
 						output: {
 							ok: true,
@@ -100,6 +111,7 @@ export function fileGithubIssue(ref?: SlackSourceRef) {
 					};
 				}
 			} catch (error) {
+				log.error('github issue filing failed', { error: errorOutput(error).error });
 				return { output: errorOutput(error) };
 			}
 		},
@@ -116,7 +128,7 @@ export function commentOnGithubIssue() {
 			issueNumber: v.pipe(v.number(), v.integer(), v.minValue(1)),
 			body: v.pipe(v.string(), v.minLength(1)),
 		}),
-		async run({ data }) {
+		async run({ data, log }) {
 			try {
 				const { owner, repo } = targetRepo();
 				const result = await client.rest.issues.createComment({
@@ -125,10 +137,18 @@ export function commentOnGithubIssue() {
 					issue_number: data.issueNumber,
 					body: data.body,
 				});
+				log.info('github issue comment added', {
+					repo: `${owner}/${repo}`,
+					issueNumber: data.issueNumber,
+				});
 				return {
 					output: { ok: true, commentId: result.data.id, url: result.data.html_url },
 				};
 			} catch (error) {
+				log.error('github issue comment failed', {
+					issueNumber: data.issueNumber,
+					error: errorOutput(error).error,
+				});
 				return { output: errorOutput(error) };
 			}
 		},

@@ -78,7 +78,7 @@ export function fileArchitectureReportIssue(context: ReportContext) {
 			summary: v.pipe(v.string(), v.minLength(1)),
 			findings: v.pipe(v.array(findingSchema), v.minLength(3), v.maxLength(7)),
 		}),
-		async run({ data }): Promise<{ output: FileReportOutput }> {
+		async run({ data, log }): Promise<{ output: FileReportOutput }> {
 			try {
 				const { owner, repo } = trackerRepo();
 				const title = `Architecture review: ${data.focusArea} (${context.runDate})`;
@@ -91,6 +91,11 @@ export function fileArchitectureReportIssue(context: ReportContext) {
 						body,
 						labels: [reviewLabel()],
 					});
+					log.info('architecture review filed', {
+						repo: `${owner}/${repo}`,
+						issueNumber: result.data.number,
+						findings: data.findings.length,
+					});
 					return {
 						output: { ok: true, issueNumber: result.data.number, url: result.data.html_url, labelled: true },
 					};
@@ -98,11 +103,19 @@ export function fileArchitectureReportIssue(context: ReportContext) {
 					if (!isLabelRejection(error)) throw error;
 					// Discoverability degrades, the week's report still lands.
 					const result = await client.rest.issues.create({ owner, repo, title, body });
+					log.info('architecture review filed unlabelled', {
+						repo: `${owner}/${repo}`,
+						issueNumber: result.data.number,
+						findings: data.findings.length,
+					});
 					return {
 						output: { ok: true, issueNumber: result.data.number, url: result.data.html_url, labelled: false },
 					};
 				}
 			} catch (error) {
+				log.error('architecture review filing failed', {
+					error: error instanceof Error ? error.message : String(error),
+				});
 				return { output: { ok: false, error: error instanceof Error ? error.message : String(error) } };
 			}
 		},
