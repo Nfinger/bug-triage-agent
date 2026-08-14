@@ -9,7 +9,7 @@
 		"check:types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@cloudflare/sandbox": "^0.11.0",
+		"@cloudflare/sandbox": "0.12.7",
 		"@flue/github": "^2.0.3",
 		"@flue/runtime": "^2.0.3",
 		"@flue/slack": "^2.0.3",
