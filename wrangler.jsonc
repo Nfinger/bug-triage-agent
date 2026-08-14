@@ -1,0 +1,16 @@
+{
+	"$schema": "./node_modules/wrangler/config-schema.json",
+	"name": "bug-triage-agent",
+	"compatibility_date": "2026-08-14",
+	"compatibility_flags": ["nodejs_compat"],
+	"observability": {
+		"enabled": true,
+		"traces": { "enabled": true },
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["FlueHelloAgent", "FlueBugTriageAgent"],
+		},
+	],
+}

@@ -10,7 +10,7 @@ How it flows: Slack Events API → `POST /channels/slack/events` (signature-veri
 npm install
 ```
 
-Then add a model provider API key to `.env` (any [provider Pi supports](https://pi.dev/docs/latest/providers#api-keys)). Copy `.env.example` for the full list of variables this app needs.
+Then add a model provider API key to `.env` (any [provider Pi supports](https://pi.dev/docs/latest/providers#api-keys)). Copy `.env.example` for the full list of variables this app needs. This app targets Cloudflare Workers (`flue.config.ts`), so local dev runs in workerd via `vite dev`; if you'd rather keep local variables separate from `.env`, copy the same keys into a gitignored `.dev.vars` file instead — see [Deploy](#deploy) for how those become production secrets.
 
 ### Slack (bug-report ingress)
 
@@ -45,10 +45,34 @@ The Hello agent is served at `http://localhost:5173/agents/hello` — see `src/a
 
 ## Deploy
 
+This app runs on Cloudflare Workers — each agent (`Hello`, `BugTriage`) is generated as its own Durable Object class (see [`wrangler.jsonc`](./wrangler.jsonc)). Persistence is Durable Object SQLite, not a local file, so there's no database to provision.
+
+### One-time setup
+
+1. Set the deployed Worker's secrets (these are separate from your local `.env`/`.dev.vars`, and persist across deploys — you only need to do this once, or whenever a value changes):
+   ```sh
+   npx wrangler secret put OPENROUTER_API_KEY
+   npx wrangler secret put SLACK_SIGNING_SECRET
+   npx wrangler secret put SLACK_BUG_CHANNEL_ID
+   npx wrangler secret put GITHUB_TOKEN
+   npx wrangler secret put GITHUB_REPO
+   ```
+2. Point Slack's Events API Request URL at the deployed Worker (`https://<worker-name>.<your-subdomain>.workers.dev/channels/slack/events`) instead of a local tunnel.
+
+### Manual deploy
+
 ```sh
-npm run build
-node dist/server.mjs
+npm run deploy   # vite build && wrangler deploy
 ```
+
+### Continuous deploy (GitHub Actions)
+
+[`.github/workflows/deploy.yml`](./.github/workflows/deploy.yml) builds and deploys automatically on every push to `main` — in practice, every merged PR. It needs two repository secrets (**Settings → Secrets and variables → Actions**):
+
+- `CLOUDFLARE_API_TOKEN` — a token scoped with the "Edit Cloudflare Workers" template
+- `CLOUDFLARE_ACCOUNT_ID` — your Cloudflare account ID (`wrangler whoami` shows it)
+
+These authorize the *deploy*; they're unrelated to the app secrets set with `wrangler secret put` above, which only need to be set once on the Worker itself.
 
 ## Learn more
 
