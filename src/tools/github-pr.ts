@@ -17,6 +17,10 @@ function errorOutput(error: unknown): { ok: false; error: string } {
 	return { ok: false, error: error instanceof Error ? error.message : String(error) };
 }
 
+function execOptions(timeoutMs: number): { timeoutMs: number; signal: AbortSignal } {
+	return { timeoutMs, signal: AbortSignal.timeout(timeoutMs) };
+}
+
 type SetupWorkspaceOutput =
 	| { ok: true; path: string; branch: string; defaultBranch: string; install: string }
 	| { ok: false; error: string };
@@ -61,7 +65,7 @@ export function setupWorkspace(ref: CodingIssueRef) {
 					`git config --global user.name 'coding-agent'`,
 					`git config --global user.email 'coding-agent@noreply.invalid'`,
 				].join(' && ');
-				const configured = await harness.sandbox.exec(setup);
+				const configured = await harness.sandbox.exec(setup, execOptions(30_000));
 				if (configured.exitCode !== 0) {
 					return { output: { ok: false, error: `git config failed: ${configured.stderr}` } };
 				}
@@ -70,25 +74,28 @@ export function setupWorkspace(ref: CodingIssueRef) {
 					// faster than a full clone on large repositories.
 					const cloned = await harness.sandbox.exec(
 						`git clone --filter=blob:none https://github.com/${owner}/${repo}.git ${path}`,
-						{ timeoutMs: 300_000 },
+						execOptions(300_000),
 					);
 					if (cloned.exitCode !== 0) {
 						return { output: { ok: false, error: `git clone failed: ${cloned.stderr}` } };
 					}
 				} else {
-					const fetched = await harness.sandbox.exec(`git -C ${path} fetch origin`, {
-						timeoutMs: 120_000,
-					});
+					const fetched = await harness.sandbox.exec(
+						`git -C ${path} fetch origin`,
+						execOptions(120_000),
+					);
 					if (fetched.exitCode !== 0) {
 						return { output: { ok: false, error: `git fetch failed: ${fetched.stderr}` } };
 					}
 				}
 				const head = await harness.sandbox.exec(
 					`git -C ${path} symbolic-ref --short refs/remotes/origin/HEAD || git -C ${path} rev-parse --abbrev-ref HEAD`,
+					execOptions(30_000),
 				);
 				const defaultBranch = head.stdout.trim().replace(/^origin\//, '') || 'main';
 				const checkedOut = await harness.sandbox.exec(
 					`git -C ${path} rev-parse --verify ${branch} >/dev/null 2>&1 && git -C ${path} checkout ${branch} || git -C ${path} checkout -b ${branch} origin/${defaultBranch}`,
+					execOptions(60_000),
 				);
 				if (checkedOut.exitCode !== 0) {
 					return { output: { ok: false, error: `branch checkout failed: ${checkedOut.stderr}` } };
@@ -101,7 +108,7 @@ export function setupWorkspace(ref: CodingIssueRef) {
 				if (await harness.sandbox.exists(`${path}/pnpm-lock.yaml`)) {
 					const installed = await harness.sandbox.exec(
 						`cd ${path} && pnpm install --prefer-offline --frozen-lockfile`,
-						{ timeoutMs: 900_000 },
+						execOptions(900_000),
 					);
 					install =
 						installed.exitCode === 0
