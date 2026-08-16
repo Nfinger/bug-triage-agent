@@ -2,6 +2,21 @@
 
 ## ADDED Requirements
 
+### Requirement: Push access is verified before any fix work starts
+Before the workspace is set up or any investigation or code changes begin, the system SHALL verify that the configured GitHub token has push permission on the target repository. If it does not, the agent SHALL comment the specific, actionable permission error (naming the missing PAT scopes) on the originating issue immediately and stop — no clone, fix, or PR work is attempted. The check SHALL also be enforced inside workspace setup so it cannot be skipped.
+
+#### Scenario: Token lacks push permission
+- **WHEN** the coding agent is dispatched and the token's permissions on the target repository do not include push
+- **THEN** the issue receives a comment naming the missing scopes (Contents and Pull requests read/write) and no workspace setup, investigation, or code changes occur
+
+#### Scenario: Token has push permission
+- **WHEN** the preflight confirms push permission
+- **THEN** fix work proceeds normally
+
+#### Scenario: Workspace setup independently refuses without push access
+- **WHEN** workspace setup is invoked while the token lacks push permission
+- **THEN** setup returns the permission error without cloning
+
 ### Requirement: A validated fix becomes exactly one pull request per issue
 After its checks pass, the agent SHALL push the work branch and open a pull request against the repository's default branch via a bound tool. The PR body SHALL reference the originating issue with a closing keyword (`Fixes #<number>`) and summarize the change and how it was validated. The agent SHALL open at most one PR per issue conversation, reusing the existing PR for any follow-up pushes.
 
