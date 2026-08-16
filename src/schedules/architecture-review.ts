@@ -25,6 +25,30 @@ export async function dispatchArchitectureReview(firedAt: Date): Promise<void> {
 	const runDate = runDateIn(firedAt, TIMEZONE);
 	const conversationId = `arch-review-${runDate}`;
 
+	try {
+		await dispatchRun(conversationId, focus, runDate, firedAt);
+	} catch (error) {
+		// A byte-identical redelivery dedupes silently, but a second fire on the
+		// same day carries a new scheduledAt, so the shared idempotency key is
+		// rejected as "a different submission". That still means this runDate is
+		// already handled — absorb it instead of letting scheduled() throw
+		// (Cloudflare retries erroring scheduled invocations).
+		if (error instanceof Error && /idempotency/i.test(error.message)) {
+			console.log(`[architecture-review] duplicate fire for ${runDate} ignored`);
+			return;
+		}
+		throw error;
+	}
+
+	console.log(`[architecture-review] dispatched ${conversationId} (${focus.id})`);
+}
+
+async function dispatchRun(
+	conversationId: string,
+	focus: ReturnType<typeof selectFocusArea>,
+	runDate: string,
+	firedAt: Date,
+): Promise<void> {
 	await dispatch(ArchitectureReview, {
 		id: conversationId,
 		idempotencyKey: conversationId,
@@ -47,6 +71,4 @@ export async function dispatchArchitectureReview(firedAt: Date): Promise<void> {
 			},
 		},
 	});
-
-	console.log(`[architecture-review] dispatched ${conversationId} (${focus.id})`);
 }

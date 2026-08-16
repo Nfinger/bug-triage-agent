@@ -17,10 +17,11 @@ const KIND_LABELS = {
 
 const SEVERITY_ORDER = { high: 0, medium: 1, low: 2 } as const;
 
-// Annotated because the tool has three exits (labelled, unlabelled, failed):
-// without it the inferred union widens into optional-undefined members.
+// Annotated because the tool has four exits (labelled, unlabelled, already
+// filed, failed): without it the inferred union widens into
+// optional-undefined members.
 type FileReportOutput =
-	| { ok: true; issueNumber: number; url: string; labelled: boolean }
+	| { ok: true; issueNumber: number; url: string; labelled: boolean; alreadyExisted?: boolean }
 	| { ok: false; error: string };
 
 const findingSchema = v.object({
@@ -81,7 +82,36 @@ export function fileArchitectureReportIssue(context: ReportContext) {
 		async run({ data, log }): Promise<{ output: FileReportOutput }> {
 			try {
 				const { owner, repo } = trackerRepo();
-				const title = `Architecture review: ${data.focusArea} (${context.runDate})`;
+				// Deterministic title from the run context, not model input — it is
+				// also the dedup key below.
+				const title = `Architecture review: ${context.focusAreaTitle} (${context.runDate})`;
+				// One report per run, enforced where it can't be skipped: dispatch
+				// idempotency only holds within a session, and a re-admitted fire
+				// re-runs the agent, so the tool itself checks for this run's issue
+				// before creating another.
+				const existing = await client.rest.issues.listForRepo({
+					owner,
+					repo,
+					labels: reviewLabel(),
+					state: 'all',
+					per_page: 100,
+				});
+				const already = existing.data.find((issue) => issue.title === title);
+				if (already) {
+					log.info('architecture review already filed for this run', {
+						repo: `${owner}/${repo}`,
+						issueNumber: already.number,
+					});
+					return {
+						output: {
+							ok: true,
+							issueNumber: already.number,
+							url: already.html_url,
+							labelled: true,
+							alreadyExisted: true,
+						},
+					};
+				}
 				const body = issueBody(context, data.summary, data.findings);
 				try {
 					const result = await client.rest.issues.create({
