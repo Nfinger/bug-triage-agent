@@ -2,7 +2,7 @@
 import { defineSubagent, useInitialData, useModel, useSubagent, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { commentOnGithubIssue } from '../tools/github-issues.ts';
-import { openPullRequest, setupWorkspace } from '../tools/github-pr.ts';
+import { openPullRequest, preflightPushAccess, setupWorkspace } from '../tools/github-pr.ts';
 import { attachIssueSandbox, codeWriter, investigator } from './coding-workers.ts';
 
 const initialDataSchema = v.object({
@@ -37,12 +37,14 @@ export function Coding() {
 			agent: codeWriter(sandboxKey),
 		}),
 	);
+	useTool(preflightPushAccess(issue));
 	useTool(setupWorkspace(issue));
 	useTool(openPullRequest(issue));
 	useTool(commentOnGithubIssue());
 	return `You fix one GitHub issue end-to-end: issue #${issue.issueNumber} ("${issue.title}") in ${issue.owner}/${issue.repo}. The conversation's first message carries the issue body; later messages may add follow-ups.
 
 Workflow — in order:
+0. Call preflight_push_access FIRST. If it returns ok: false, call comment_on_github_issue on issue #${issue.issueNumber} quoting the error verbatim, then stop — do not set up the workspace, investigate, or write any code. A token that cannot push means any fix would be stranded.
 1. Call setup_workspace to clone the repository into /workspace/repo on the work branch. Everything happens on that branch; never commit to the default branch.
 2. Delegate investigation to the "investigator" subagent (task tool) with a brief quoting the issue. If the issue is trivially localized you may skip this, but when in doubt, investigate.
 3. Plan the fix, then delegate implementation to the "code-writer" subagent. Each task brief must name the files/area to change, what done means, and which targeted checks to run. Give parallel tasks disjoint file scopes — when scopes might overlap, delegate sequentially. You do not edit code yourself.

@@ -22,6 +22,56 @@ function execOptions(timeoutMs: number): { timeoutMs: number; signal: AbortSigna
 	return { timeoutMs, signal: AbortSignal.timeout(timeoutMs) };
 }
 
+/**
+ * Verifies the configured token can push to the repository. A token that can
+ * file issues but not push (the original #476 failure) otherwise surfaces only
+ * AFTER a fix is built, stranding finished work in the sandbox — this check
+ * runs before any clone or fix work and is re-run inside setup_workspace so
+ * the gate cannot be skipped.
+ */
+export async function checkPushAccess(ref: CodingIssueRef): Promise<
+	{ ok: true; defaultBranch: string } | { ok: false; error: string }
+> {
+	const { owner, repo } = ref;
+	try {
+		const { data } = await client.rest.repos.get({ owner, repo });
+		if (!data.permissions?.push) {
+			return {
+				ok: false,
+				error:
+					`GITHUB_TOKEN cannot push to ${owner}/${repo}. Re-issue the fine-grained PAT with ` +
+					`"Contents: Read and write" and "Pull requests: Read and write" on this repository ` +
+					`(Issues alone is enough to file issues but not to deliver fixes).`,
+			};
+		}
+		return { ok: true, defaultBranch: data.default_branch };
+	} catch (error) {
+		return errorOutput(error);
+	}
+}
+
+export function preflightPushAccess(ref: CodingIssueRef) {
+	return defineTool({
+		name: 'preflight_push_access',
+		description:
+			'Verify the configured GitHub token can push branches and open pull requests on this ' +
+			'repository. Call this FIRST, before any other work. If it returns ok: false, comment ' +
+			'the error on the issue and stop — do not set up the workspace or write any code.',
+		input: v.object({}),
+		async run({ log }) {
+			const result = await checkPushAccess(ref);
+			if (!result.ok) {
+				log.error('push-access preflight failed', {
+					repo: `${ref.owner}/${ref.repo}`,
+					issueNumber: ref.issueNumber,
+					error: result.error,
+				});
+			}
+			return { output: result };
+		},
+	});
+}
+
 type SetupWorkspaceOutput =
 	| { ok: true; path: string; branch: string; defaultBranch: string; install: string }
 	| { ok: false; error: string };
@@ -46,6 +96,16 @@ export function setupWorkspace(ref: CodingIssueRef) {
 			const { owner, repo, issueNumber } = ref;
 			const token = process.env.GITHUB_TOKEN;
 			if (!token) return { output: { ok: false, error: 'GITHUB_TOKEN is not configured' } };
+			// Hard gate: never start fix work on a token that cannot deliver it.
+			const access = await checkPushAccess(ref);
+			if (!access.ok) {
+				log.error('workspace setup refused: no push access', {
+					repo: `${owner}/${repo}`,
+					issueNumber,
+					error: access.error,
+				});
+				return { output: access };
+			}
 			const branch = workBranch(issueNumber);
 			const path = '/workspace/repo';
 			const startedAt = Date.now();

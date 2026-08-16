@@ -56,6 +56,12 @@ npm run dev
 
 Runs the Worker locally (with a local sandbox container — Docker required). The prep script snapshots the target repo's `pnpm-lock.yaml` into `container-context/` so the sandbox image build pre-fetches the entire dependency store — coding-agent runs then install in seconds instead of minutes. Re-run it (and rebuild) when the target repo's lockfile changes materially; skipping it just means cold installs. Both agents are dispatched by their channels (`src/agents/bug-triage.ts` by Slack, `src/agents/coding.ts` by GitHub) — see `src/app.ts` for the route map.
 
+To exercise the coding-agent pipeline locally without a tunnel, simulate the label event against the running dev server — it fetches the real issue and delivers a correctly signed webhook, so everything downstream (sandbox, fix, push, PR) runs for real:
+
+```sh
+node --env-file=.dev.vars scripts/simulate-label-webhook.mjs <issue-number> [port]
+```
+
 ## Weekly architecture review
 
 Every Friday at 09:00 UTC, the `ArchitectureReview` agent reviews **one** aspect of this system and files a report as a GitHub issue titled `Architecture review: <focus area> (<date>)`, labelled `ARCH_REVIEW_LABEL` (default `architecture-review`). Each report carries 3–7 findings — improvements, hardening opportunities, and technical debt — ranked by severity, each with `path:line` evidence and a proposed next step.
