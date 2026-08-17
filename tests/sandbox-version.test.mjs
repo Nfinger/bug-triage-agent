@@ -2,11 +2,17 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+import { CODING_RUN_BUDGET_MS } from '../src/tools/failure-breaker.ts';
+
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const dockerfile = await readFile(new URL('../Dockerfile', import.meta.url), 'utf8');
 const codingAgent = await readFile(new URL('../src/agents/coding.ts', import.meta.url), 'utf8');
-const codingWorkers = await readFile(new URL('../src/agents/coding-workers.ts', import.meta.url), 'utf8');
+const codingSandbox = await readFile(
+	new URL('../src/agents/coding-sandbox.ts', import.meta.url),
+	'utf8',
+);
 const githubPrTools = await readFile(new URL('../src/tools/github-pr.ts', import.meta.url), 'utf8');
+const appSource = await readFile(new URL('../src/app.ts', import.meta.url), 'utf8');
 
 test('Sandbox SDK and container base image use the same exact version', () => {
 	const sdkVersion = packageJson.dependencies['@cloudflare/sandbox'];
@@ -19,7 +25,7 @@ test('Sandbox SDK and container base image use the same exact version', () => {
 
 test('issue sandbox lifetime matches the coding agent durability budget', () => {
 	const durability = codingAgent.match(/Coding\.durability\s*=\s*\{\s*timeoutMs:\s*([\d_]+)/);
-	const sleepAfter = codingWorkers.match(/sleepAfter:\s*'(\d+)h'/);
+	const sleepAfter = codingSandbox.match(/sleepAfter:\s*'(\d+)h'/);
 	assert.ok(durability, 'Coding agent must declare a durability timeout');
 	assert.ok(sleepAfter, 'Issue sandbox must declare an hour-based sleep timeout');
 
@@ -28,9 +34,20 @@ test('issue sandbox lifetime matches the coding agent durability budget', () => 
 	assert.equal(sandboxSleepMs, durabilityMs);
 });
 
+test('the failure breaker budget constant matches the durability timeout', () => {
+	const durability = codingAgent.match(/Coding\.durability\s*=\s*\{\s*timeoutMs:\s*([\d_]+)/);
+	assert.ok(durability);
+	assert.equal(Number(durability[1].replaceAll('_', '')), CODING_RUN_BUDGET_MS);
+});
+
 test('optional dependency install has an independent caller deadline', () => {
 	assert.match(
 		githubPrTools,
 		/await withDeadline\(\s*harness\.sandbox\.exec\([\s\S]*?execOptions\(180_000\)[\s\S]*?195_000,[\s\S]*?catch \(error\) \{[\s\S]*?install = `failed:/,
 	);
+});
+
+test('the coding failsafe is registered at startup', () => {
+	assert.match(appSource, /import \{ registerCodingFailsafe \} from '\.\/failsafe\.ts'/);
+	assert.match(appSource, /registerCodingFailsafe\(\)/);
 });

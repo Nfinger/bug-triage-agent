@@ -28,6 +28,15 @@
 	"durable_objects": {
 		"bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
 	},
+	// CAPACITY NOTE (2026-08-16 incident): every labeled issue pins one
+	// container instance for up to its full three-hour budget (sleepAfter:
+	// '3h'). A batch of concurrent dispatches can exhaust the account's
+	// container instance allowance, after which new sandboxes fail every
+	// operation immediately (max_container_instances_exceeded /
+	// no_container_instance_available). The agent now fails closed when that
+	// happens (breaker + blocker comment), but if batches of 10+ issues are
+	// routine, raise this app's "max_instances" to match the plan's allowance
+	// or throttle label application upstream.
 	"containers": [{ "class_name": "Sandbox", "image": "./Dockerfile" }],
 	"observability": {
 		"enabled": true,

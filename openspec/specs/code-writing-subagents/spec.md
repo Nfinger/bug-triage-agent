@@ -14,11 +14,15 @@ The orchestrating coding agent SHALL declare worker subagents via `useSubagent(d
 - **THEN** it can delegate to the `investigator` subagent, whose task result reports findings without modifying the working tree
 
 ### Requirement: Subagents operate in the shared per-issue sandbox
-Worker subagents SHALL attach the same per-issue sandbox as their orchestrator (sandbox identity derived from the issue, shared by closure), so every delegated task reads and writes the one working tree and branch for that issue. Subagents SHALL NOT create sandboxes of their own keyed to anything else.
+Worker subagents SHALL operate in the same per-issue sandbox as their orchestrator by inheriting the parent agent's environment, which is how Flue delegates share a sandbox. Only the orchestrator attaches the sandbox (identity derived from the issue); subagent renders SHALL NOT call `useSandbox` or attach any sandbox of their own — the framework rejects sandbox attachment in a subagent render, and a subagent that attempts it fails every delegation. Every delegated task therefore reads and writes the one working tree and branch for that issue.
 
 #### Scenario: Subagent edits are visible to the orchestrator
 - **WHEN** a `code-writer` subagent completes a task that modified files
 - **THEN** the orchestrator sees those modifications in its own sandbox working tree without any copying step
+
+#### Scenario: Subagent renders never attach a sandbox
+- **WHEN** the `investigator` or `code-writer` agent function is rendered for a delegated task
+- **THEN** it declares no sandbox of its own (no `useSandbox` call) and the delegation succeeds using the orchestrator's inherited environment
 
 #### Scenario: Concurrent issues remain isolated
 - **WHEN** subagents are working on two different issues at the same time

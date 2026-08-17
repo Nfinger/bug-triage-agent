@@ -39,6 +39,21 @@ Once the PR is opened, the agent SHALL comment on the originating issue with the
 - **WHEN** the agent abandons a fix attempt
 - **THEN** the issue gains a comment explaining the reason, and no PR exists for that attempt
 
+### Requirement: Publication is fail-closed
+Reporting the outcome SHALL NOT depend on the model choosing to report. When a response is about to end without an opened PR and without an issue comment, the system SHALL redirect the model back to publish, a bounded number of times; if the model still does not publish, the system SHALL post a blocker comment on the issue directly. When a run's submission settles as failed (budget or retries exhausted) so no further model turn exists, the system SHALL post the blocker comment from outside the agent, including what is known about the failure and any checkpointed branch. Deliberate cancellations (the coding label removed) SHALL stay silent. Failsafe comments SHALL be deduplicated per settled submission via an embedded marker.
+
+#### Scenario: Silent completion is intercepted
+- **WHEN** the agent's response would settle without any successful `open_pull_request` or `comment_on_github_issue` call
+- **THEN** the model is redirected to publish; after the bounded redirects are spent, the harness itself posts a blocker comment on the issue
+
+#### Scenario: A timed-out run still reports
+- **WHEN** a coding submission exhausts its three-hour budget mid-loop and settles as failed
+- **THEN** the originating issue receives a blocker comment describing the failure (and the checkpointed branch, when one was preserved) without any model involvement
+
+#### Scenario: Deliberate cancellation stays silent
+- **WHEN** a run is aborted because the coding-agent label was removed
+- **THEN** no failsafe comment is posted
+
 ### Requirement: Publishing failures are surfaced
 If pushing the branch or creating the PR fails (auth, permissions, API error), the tool result SHALL record the error and the agent SHALL report the failure rather than claiming success.
 

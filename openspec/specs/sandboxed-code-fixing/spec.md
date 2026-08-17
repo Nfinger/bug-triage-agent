@@ -31,6 +31,28 @@ Before publishing anything, the agent SHALL run the project's available checks (
 - **WHEN** the agent cannot get the project's checks to pass after iterating
 - **THEN** no branch is pushed and the failure is reported on the issue instead
 
+### Requirement: Repeated sandbox tool failures are bounded and terminal
+The system SHALL bound repeated sandbox tool failures instead of letting the model loop on them. After a small number of identical consecutive failures of one tool, the error result SHALL carry explicit guidance to stop repeating the call; past a hard threshold (identical failures of one tool, or consecutive failures across sandbox tools), the sandbox tool set SHALL be disabled for the rest of the run and every further sandbox call SHALL fail fast with an instruction to publish a blocker comment and stop. A new submission (label retry) SHALL start with a clean failure count.
+
+#### Scenario: Identical failures trip the breaker
+- **WHEN** the same sandbox tool fails the same way five times in a row (for example because the container cannot be scheduled)
+- **THEN** sandbox tools are disabled for the remainder of the run and every subsequent sandbox call returns a fast, explicit instruction to report the blocker on the issue instead of retrying
+
+#### Scenario: A label retry starts clean
+- **WHEN** the coding label is re-applied after a run whose breaker tripped
+- **THEN** the new submission begins with sandbox tools enabled and failure counters reset
+
+### Requirement: Partial work is checkpointed before the run ends
+The agent SHALL be warned, inside tool results, when its wall-clock budget is nearly exhausted, with instructions to commit, push the work branch, and publish (PR or blocker comment) instead of starting new work. When a run's submission settles as failed anyway, the system SHALL attempt a mechanical checkpoint — commit dirty state and push the work branch when it carries commits beyond the default branch — so partial work survives the sandbox.
+
+#### Scenario: Deadline warnings precede the abort
+- **WHEN** a run approaches the end of its three-hour budget
+- **THEN** sandbox tool results carry a deadline notice telling the agent to checkpoint and publish, before the hard abort fires
+
+#### Scenario: A failed run preserves its commits
+- **WHEN** a run's submission settles as failed while the work branch holds commits beyond the default branch
+- **THEN** the branch is pushed to the remote and the blocker comment names it (marked as not validated)
+
 ### Requirement: Credentials do not leak into the repository or its history
 The `GITHUB_TOKEN` used for authenticated git operations SHALL NOT be written into committed files or recorded in commit contents. Authentication SHALL be confined to git's remote configuration or per-command credentials.
 

@@ -1,6 +1,7 @@
 import { defineTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { client } from '../channels/github-client.ts';
+import type { CommentClient, IssueRef } from './publication-failsafe.ts';
 
 /** Where the report came from in Slack; absent when the agent runs standalone. */
 export interface SlackSourceRef {
@@ -116,6 +117,31 @@ export function fileGithubIssue(ref?: SlackSourceRef) {
 			}
 		},
 	});
+}
+
+// Comment access for the publication failsafe (finish-seam direct posts and
+// the settlement observer). Listing serves marker-based deduplication only;
+// it is capped at one page because dedupe is best-effort by design.
+export function issueCommentClient(): CommentClient {
+	return {
+		async listComments(ref: IssueRef) {
+			const { data } = await client.rest.issues.listComments({
+				owner: ref.owner,
+				repo: ref.repo,
+				issue_number: ref.issueNumber,
+				per_page: 100,
+			});
+			return data;
+		},
+		async createComment(ref: IssueRef, body: string) {
+			await client.rest.issues.createComment({
+				owner: ref.owner,
+				repo: ref.repo,
+				issue_number: ref.issueNumber,
+				body,
+			});
+		},
+	};
 }
 
 export function commentOnGithubIssue() {
