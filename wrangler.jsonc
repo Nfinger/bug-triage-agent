@@ -28,16 +28,23 @@
 	"durable_objects": {
 		"bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
 	},
-	// CAPACITY NOTE (2026-08-16 incident): every labeled issue pins one
-	// container instance for up to its full three-hour budget (sleepAfter:
-	// '3h'). A batch of concurrent dispatches can exhaust the account's
-	// container instance allowance, after which new sandboxes fail every
-	// operation immediately (max_container_instances_exceeded /
-	// no_container_instance_available). The agent now fails closed when that
-	// happens (breaker + blocker comment), but if batches of 10+ issues are
-	// routine, raise this app's "max_instances" to match the plan's allowance
-	// or throttle label application upstream.
-	"containers": [{ "class_name": "Sandbox", "image": "./Dockerfile" }],
+	// CAPACITY (2026-08-16 incident): every labeled issue pins one container
+	// instance for up to its full three-hour budget (sleepAfter: '3h').
+	// - instance_type "standard-1" (4 GiB / half vCPU): the default "lite"
+	//   tier starved installs/builds/tests of a ~1,500-package Node repo,
+	//   showing up as pnpm stalls and hours-long single commands.
+	// - max_instances 10: sized to the observed 10-issue dispatch batches.
+	//   Ten concurrent standard-1 instances must fit the account plan's
+	//   container allowance; past either limit, new sandboxes fail admission
+	//   immediately and the agent fails closed (breaker + blocker comment).
+	"containers": [
+		{
+			"class_name": "Sandbox",
+			"image": "./Dockerfile",
+			"instance_type": "standard-1",
+			"max_instances": 10
+		}
+	],
 	"observability": {
 		"enabled": true,
 		"traces": { "enabled": true }
