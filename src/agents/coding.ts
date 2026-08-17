@@ -36,7 +36,10 @@ const initialDataSchema = v.object({
 // environment — they must NOT attach one themselves), so their work lands
 // directly in this agent's working tree.
 export function Coding() {
-	useModel('openrouter/moonshotai/kimi-k2.6');
+	// Orchestration needs a model that reliably delegates and follows the
+	// publish contract: kimi-k2.6 completed zero fixes and ignored two
+	// publication-enforcement redirects in the 2026-08-17 rerun of issue #495.
+	useModel('openrouter/anthropic/claude-sonnet-4.6');
 	const issue = useInitialData<v.InferOutput<typeof initialDataSchema>>();
 	const breaker = getIssueBreaker(issue);
 	// The hard deadline is durable state so deadline warnings survive isolate
