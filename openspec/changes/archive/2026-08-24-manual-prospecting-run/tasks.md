@@ -12,4 +12,4 @@
 
 - [x] 2.1 `tests/manual-run.test.mjs`: CRM helpers against a scripted client (domain found/not found, clear writes empty property); route auth (404 unconfigured, 401 wrong token — nothing dispatched)
 - [x] 2.2 `npm test` and `npm run check:types` pass
-- [ ] 2.3 Deploy via CI, set `PROSPECTING_MANUAL_TOKEN`, call the endpoint with `resetDomains: ["visitpointlookout.com"]`, and confirm a run dispatches and retries Point Lookout
+- [x] 2.3 Deploy via CI, set `PROSPECTING_MANUAL_TOKEN`, call the endpoint with `resetDomains: ["visitpointlookout.com"]`, and confirm a run dispatches and retries Point Lookout

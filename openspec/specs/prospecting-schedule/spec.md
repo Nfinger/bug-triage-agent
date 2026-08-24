@@ -4,7 +4,7 @@
 TBD - created by archiving change add-prospecting-agent. Update Purpose after archive.
 ## Requirements
 ### Requirement: Daily cron-dispatched run
-A Cloudflare Cron Trigger SHALL dispatch one `Prospecting` run per day. The run's conversation ID and idempotency key SHALL both derive from the fire's UTC date so a duplicate fire for the same day is a no-op. The agent SHALL be dispatch-only (no HTTP route).
+A Cloudflare Cron Trigger SHALL dispatch one `Prospecting` run per day. The run's conversation ID and idempotency key SHALL both derive from the fire's UTC date so a duplicate fire for the same day is a no-op. The agent SHALL expose no unauthenticated HTTP route; the only HTTP entry point is the operator-only manual-run endpoint.
 
 #### Scenario: Duplicate fire
 - **WHEN** Cloudflare delivers the same day's trigger twice
@@ -33,9 +33,21 @@ At the end of each run the agent SHALL post one summary message to `SLACK_PROSPE
 - **THEN** a Slack message reports the failure and how far the run got
 
 ### Requirement: Manual trigger for verification
-Exporting the dispatcher SHALL allow a run to be started by hand for a given date (for example via a script), using the same idempotency so it cannot duplicate that day's scheduled run.
+Exporting the dispatcher SHALL allow a run to be started by hand for a given date (for example via a script), using the same idempotency so it cannot duplicate that day's scheduled run. Additionally, a token-guarded HTTP endpoint SHALL start a one-off run with a unique manual run id that deliberately bypasses the same-day key, and MAY first clear the prospecting cooldown of named companies so the selector can pick them again. The endpoint SHALL be absent (404) when its token is not configured and SHALL reject requests without the correct bearer token; the token comparison SHALL not short-circuit on length or content.
 
 #### Scenario: Manual run for today
 - **WHEN** an operator invokes the dispatcher for today after the cron already ran
 - **THEN** no second run occurs
+
+#### Scenario: One-off HTTP run after the daily run
+- **WHEN** an operator calls the manual-run endpoint with the correct token after today's run already happened
+- **THEN** a new run dispatches under a unique manual run id and reports whether it dispatched and how many companies were selected
+
+#### Scenario: Cooldown reset by domain
+- **WHEN** the manual-run request names company domains to reset
+- **THEN** each matching company's `last_prospected_at` is cleared before selection, and the response reports per-domain success or failure
+
+#### Scenario: Unauthorized request
+- **WHEN** the endpoint is called with a missing or wrong token, or the token secret is not configured
+- **THEN** no run dispatches and nothing about the run's existence is revealed beyond a 401 (or 404 when unconfigured)
 
