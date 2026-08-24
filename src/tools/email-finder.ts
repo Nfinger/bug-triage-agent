@@ -48,6 +48,9 @@ export function findContactEmail(context: RunContext, client?: HunterClient) {
 			if ((data.firstName === undefined) !== (data.lastName === undefined)) {
 				return { output: { ok: false, error: 'Provide both firstName and lastName, or neither' } };
 			}
+			if (!context.research.takeLookupAttempt(data.companyId)) {
+				return { output: { ok: false, error: `Lookup attempt cap reached for company ${data.companyId} — the provider may be down; stop retrying and proceed with what you have.` } };
+			}
 			if (!context.research.take(data.companyId, 'lookups')) {
 				return { output: { ok: false, error: `Lookup budget spent for company ${data.companyId}. Proceed with what you have.` } };
 			}

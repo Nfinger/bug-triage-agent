@@ -78,8 +78,8 @@ test('research budget is per company and per kind', () => {
 	assert.equal(budget.take('a', 'searches'), true);
 	assert.equal(budget.take('a', 'searches'), false);
 	assert.equal(budget.take('b', 'fetches'), true);
-	assert.deepEqual(budget.remaining('a'), { fetches: 0, searches: 0, lookups: 2, fetchAttempts: 6 });
-	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, lookups: 2, fetchAttempts: 6 });
+	assert.deepEqual(budget.remaining('a'), { fetches: 0, searches: 0, lookups: 2, fetchAttempts: 6, lookupAttempts: 4 });
+	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, lookups: 2, fetchAttempts: 6, lookupAttempts: 4 });
 });
 
 test('discovery bonus expands both allowances and is granted at most once', () => {
@@ -88,12 +88,12 @@ test('discovery bonus expands both allowances and is granted at most once', () =
 	assert.equal(budget.take('a', 'fetches'), false);
 	assert.equal(budget.grantDiscoveryBonus('a'), true);
 	assert.equal(budget.grantDiscoveryBonus('a'), false);
-	assert.deepEqual(budget.remaining('a'), { fetches: 2, searches: 2, lookups: 2, fetchAttempts: 7 });
+	assert.deepEqual(budget.remaining('a'), { fetches: 2, searches: 2, lookups: 2, fetchAttempts: 7, lookupAttempts: 4 });
 	assert.equal(budget.take('a', 'fetches'), true);
 	assert.equal(budget.take('a', 'searches'), true);
 	assert.equal(budget.take('a', 'searches'), true);
 	assert.equal(budget.take('a', 'searches'), false);
-	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, lookups: 2, fetchAttempts: 5 });
+	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, lookups: 2, fetchAttempts: 5, lookupAttempts: 4 });
 });
 
 test('refunds restore a unit but never go below zero used', () => {

@@ -53,6 +53,16 @@ test('email-finder normalizes score and a provider error is surfaced', async () 
 	assert.match(failure.error, /429/);
 });
 
+test('the client calls its fetch with a safe this (regression: Illegal invocation)', async () => {
+	function strictFetch() {
+		if (this !== globalThis && this !== undefined) throw new TypeError('Illegal invocation: incorrect this reference');
+		return Promise.resolve(new Response(JSON.stringify({ data: { emails: [] } }), { status: 200 }));
+	}
+	const client = new HunterClient('k', strictFetch);
+	const result = await client.domainSearch('acme.io');
+	assert.equal(result.ok, true);
+});
+
 // --- find_contact_email tool ---
 
 function fakeHunter(results) {
@@ -120,6 +130,21 @@ test('lookups are budgeted per company and refunded on provider failure', async 
 	const capped = await working.run({ data: { companyId: 'c1' }, log });
 	assert.equal(capped.output.ok, false);
 	assert.match(capped.output.error, /budget/i);
+});
+
+test('a broken provider cannot be retried forever despite refunds', async () => {
+	const research = new ResearchBudget({ fetches: 4, searches: 3, lookups: 2 });
+	const context = toolContext({ research });
+	const failing = { domainSearch: async () => ({ ok: false, error: 'Hunter returned 500' }), emailFinder: async () => ({ ok: false, error: 'x' }) };
+	const tool = findContactEmail(context, failing);
+	for (let attempt = 0; attempt < 4; attempt++) {
+		const result = await tool.run({ data: { companyId: 'c1' }, log });
+		assert.equal(result.output.ok, false);
+		assert.match(result.output.error, /Hunter returned 500/);
+	}
+	const capped = await tool.run({ data: { companyId: 'c1' }, log });
+	assert.equal(capped.output.ok, false);
+	assert.match(capped.output.error, /attempt cap/i);
 });
 
 // --- create_contact provider path ---

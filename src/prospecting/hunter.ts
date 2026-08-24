@@ -46,7 +46,9 @@ export class HunterClient {
 
 	constructor(apiKey: string, doFetch: typeof fetch = fetch) {
 		this.apiKey = apiKey;
-		this.doFetch = doFetch;
+		// Stored as an instance property, an unbound native fetch would be
+		// called with `this` = the client and throw "Illegal invocation".
+		this.doFetch = doFetch.bind(globalThis);
 	}
 
 	private async call<T>(path: string, params: Record<string, string>): Promise<HunterResult<T>> {

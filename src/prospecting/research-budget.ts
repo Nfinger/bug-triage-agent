@@ -8,7 +8,7 @@
  * unlimited requests through refunds.
  */
 export class ResearchBudget {
-	private readonly used = new Map<string, { fetches: number; searches: number; lookups: number; fetchAttempts: number }>();
+	private readonly used = new Map<string, { fetches: number; searches: number; lookups: number; fetchAttempts: number; lookupAttempts: number }>();
 	private readonly discoveryGranted = new Set<string>();
 	private readonly baseLimits: { fetches: number; searches: number; lookups: number };
 	private readonly discoveryBonus: { fetches: number; searches: number };
@@ -26,7 +26,7 @@ export class ResearchBudget {
 	private entry(companyId: string) {
 		let entry = this.used.get(companyId);
 		if (!entry) {
-			entry = { fetches: 0, searches: 0, lookups: 0, fetchAttempts: 0 };
+			entry = { fetches: 0, searches: 0, lookups: 0, fetchAttempts: 0, lookupAttempts: 0 };
 			this.used.set(companyId, entry);
 		}
 		return entry;
@@ -80,7 +80,19 @@ export class ResearchBudget {
 		return true;
 	}
 
-	remaining(companyId: string): { fetches: number; searches: number; lookups: number; fetchAttempts: number } {
+	/**
+	 * Charge one lookup attempt (success or failure). Refunds on provider
+	 * failure keep the credit budget honest, so this separate cap
+	 * (lookups + 2) is what stops retry loops against a broken provider.
+	 */
+	takeLookupAttempt(companyId: string): boolean {
+		const entry = this.entry(companyId);
+		if (entry.lookupAttempts >= this.limits(companyId).lookups + 2) return false;
+		entry.lookupAttempts++;
+		return true;
+	}
+
+	remaining(companyId: string): { fetches: number; searches: number; lookups: number; fetchAttempts: number; lookupAttempts: number } {
 		const entry = this.entry(companyId);
 		const limits = this.limits(companyId);
 		return {
@@ -88,6 +100,7 @@ export class ResearchBudget {
 			searches: limits.searches - entry.searches,
 			lookups: limits.lookups - entry.lookups,
 			fetchAttempts: this.attemptLimit(companyId) - entry.fetchAttempts,
+			lookupAttempts: limits.lookups + 2 - entry.lookupAttempts,
 		};
 	}
 }
