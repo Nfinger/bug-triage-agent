@@ -108,22 +108,38 @@ export function createContact(context: RunContext) {
 		name: 'create_contact',
 		description:
 			'Create a contact at a selected company when research found a named person and no existing contact ' +
-			'matches a target persona. The email must be on the company\'s domain and the person must have come ' +
-			'from a page you fetched this run (sourceUrl). The contact is marked as agent-created.',
+			'matches a target persona. The email must be on the company\'s domain and either found on a page you ' +
+			'fetched this run (pass sourceUrl) or verified by find_contact_email this run. The contact is marked ' +
+			'as agent-created.',
 		input: v.object({
 			companyId: v.pipe(v.string(), v.minLength(1)),
 			firstName: NAME,
 			lastName: NAME,
 			email: v.pipe(v.string(), v.trim(), v.toLowerCase(), v.email()),
 			title: v.pipe(v.string(), v.trim(), v.minLength(1), v.maxLength(120)),
-			sourceUrl: v.pipe(v.string(), v.url()),
+			sourceUrl: v.optional(v.pipe(v.string(), v.url())),
 		}),
 		async run({ data, log }): Promise<{ output: CreateOutput }> {
 			try {
 				if (!inBatch(context, data.companyId)) {
 					return { output: { ok: false, error: `Company ${data.companyId} is not in this run's batch` } };
 				}
-				if (!context.fetchedUrls.has(canonicalUrl(data.sourceUrl))) {
+				// Two evidence paths, both code-owned: the email appeared on a
+				// page fetched this run, or the provider verified it this run.
+				const providerRecord = context.verifiedEmails.get(data.email);
+				if (providerRecord) {
+					const same = (a: string | null, b: string) => !a || a.trim().toLowerCase() === b.trim().toLowerCase();
+					if (!same(providerRecord.firstName, data.firstName) || !same(providerRecord.lastName, data.lastName)) {
+						return {
+							output: {
+								ok: false,
+								error: `Name does not match the provider's record for ${data.email} ("${providerRecord.firstName ?? ''} ${providerRecord.lastName ?? ''}"). Use the provider's name or do not create the contact.`,
+							},
+						};
+					}
+				} else if (!data.sourceUrl) {
+					return { output: { ok: false, error: `${data.email} is not provider-verified this run and no sourceUrl was given; only people from fetched pages or verified lookups can be added` } };
+				} else if (!context.fetchedUrls.has(canonicalUrl(data.sourceUrl))) {
 					return { output: { ok: false, error: `sourceUrl ${data.sourceUrl} was not fetched this run; only people found on fetched pages can be added` } };
 				}
 				const company = await context.crm.getCompany(data.companyId);
@@ -155,7 +171,11 @@ export function createContact(context: RunContext) {
 					}
 					return { output: { ok: false, error: created.error } };
 				}
-				log.info('contact created by prospecting agent', { companyId: data.companyId, contactId: created.data.id });
+				log.info('contact created by prospecting agent', {
+					companyId: data.companyId,
+					contactId: created.data.id,
+					evidence: providerRecord ? `provider:${providerRecord.source}` : 'fetched-page',
+				});
 				return { output: { ok: true, contactId: created.data.id, email: data.email } };
 			} catch (error) {
 				return { output: errorOutput(error) };

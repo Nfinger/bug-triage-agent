@@ -126,6 +126,21 @@ export function manualRunToken(): string | undefined {
 	return env('PROSPECTING_MANUAL_TOKEN');
 }
 
+/** Hunter.io key for email lookups; unset means the lookup tool is not offered. */
+export function hunterApiKey(): string | undefined {
+	return env('HUNTER_API_KEY');
+}
+
+/** Minimum Hunter confidence/score for an address to count as verified. */
+export function hunterMinScore(): number {
+	return integer('HUNTER_MIN_SCORE', 80, { min: 50, max: 100 });
+}
+
+/** Hunter lookups allowed per company per run (each call costs credits). */
+export function hunterLookupsPerCompany(): number {
+	return integer('HUNTER_LOOKUPS_PER_COMPANY', 2, { min: 0, max: 10 });
+}
+
 /**
  * Validate everything a run needs before any CRM read or write. Called by the
  * dispatcher so a misconfigured deploy fails at the fire, not mid-run.

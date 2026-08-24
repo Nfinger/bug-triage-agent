@@ -8,17 +8,17 @@
  * unlimited requests through refunds.
  */
 export class ResearchBudget {
-	private readonly used = new Map<string, { fetches: number; searches: number; fetchAttempts: number }>();
+	private readonly used = new Map<string, { fetches: number; searches: number; lookups: number; fetchAttempts: number }>();
 	private readonly discoveryGranted = new Set<string>();
-	private readonly baseLimits: { fetches: number; searches: number };
+	private readonly baseLimits: { fetches: number; searches: number; lookups: number };
 	private readonly discoveryBonus: { fetches: number; searches: number };
 	private readonly extraAttempts: number;
 
 	constructor(
-		limits: { fetches: number; searches: number } = { fetches: 4, searches: 3 },
+		limits: { fetches: number; searches: number; lookups?: number } = { fetches: 4, searches: 3 },
 		options: { discoveryBonus?: { fetches: number; searches: number }; extraAttempts?: number } = {},
 	) {
-		this.baseLimits = limits;
+		this.baseLimits = { ...limits, lookups: limits.lookups ?? 2 };
 		this.discoveryBonus = options.discoveryBonus ?? { fetches: 3, searches: 2 };
 		this.extraAttempts = options.extraAttempts ?? 4;
 	}
@@ -26,17 +26,20 @@ export class ResearchBudget {
 	private entry(companyId: string) {
 		let entry = this.used.get(companyId);
 		if (!entry) {
-			entry = { fetches: 0, searches: 0, fetchAttempts: 0 };
+			entry = { fetches: 0, searches: 0, lookups: 0, fetchAttempts: 0 };
 			this.used.set(companyId, entry);
 		}
 		return entry;
 	}
 
-	private limits(companyId: string): { fetches: number; searches: number } {
+	// Provider lookups are deliberately outside the discovery bonus: their
+	// cost is per-call money, not time, so the cap stays flat.
+	private limits(companyId: string): { fetches: number; searches: number; lookups: number } {
 		if (!this.discoveryGranted.has(companyId)) return this.baseLimits;
 		return {
 			fetches: this.baseLimits.fetches + this.discoveryBonus.fetches,
 			searches: this.baseLimits.searches + this.discoveryBonus.searches,
+			lookups: this.baseLimits.lookups,
 		};
 	}
 
@@ -56,7 +59,7 @@ export class ResearchBudget {
 	}
 
 	/** Consume one unit; false (and nothing consumed) when the allowance is spent. */
-	take(companyId: string, kind: 'fetches' | 'searches'): boolean {
+	take(companyId: string, kind: 'fetches' | 'searches' | 'lookups'): boolean {
 		const entry = this.entry(companyId);
 		if (entry[kind] >= this.limits(companyId)[kind]) return false;
 		entry[kind]++;
@@ -64,7 +67,7 @@ export class ResearchBudget {
 	}
 
 	/** Give back a unit taken for an operation that failed. Attempts are never refunded. */
-	refund(companyId: string, kind: 'fetches' | 'searches'): void {
+	refund(companyId: string, kind: 'fetches' | 'searches' | 'lookups'): void {
 		const entry = this.entry(companyId);
 		if (entry[kind] > 0) entry[kind]--;
 	}
@@ -77,12 +80,13 @@ export class ResearchBudget {
 		return true;
 	}
 
-	remaining(companyId: string): { fetches: number; searches: number; fetchAttempts: number } {
+	remaining(companyId: string): { fetches: number; searches: number; lookups: number; fetchAttempts: number } {
 		const entry = this.entry(companyId);
 		const limits = this.limits(companyId);
 		return {
 			fetches: limits.fetches - entry.fetches,
 			searches: limits.searches - entry.searches,
+			lookups: limits.lookups - entry.lookups,
 			fetchAttempts: this.attemptLimit(companyId) - entry.fetchAttempts,
 		};
 	}

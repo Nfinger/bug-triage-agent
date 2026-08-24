@@ -2,12 +2,13 @@
 import { useInitialData, useModel, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { loadKnowledge } from '../prospecting/business-docs.ts';
-import { contactsPerCompany, cooldownDays, dailyCap, outreachEnabled, outreachTemplateId, senderEmail } from '../prospecting/config.ts';
+import { contactsPerCompany, cooldownDays, dailyCap, hunterApiKey, hunterLookupsPerCompany, outreachEnabled, outreachTemplateId, senderEmail } from '../prospecting/config.ts';
 import { Crm } from '../prospecting/crm.ts';
 import { OutreachLedger } from '../prospecting/ledger.ts';
 import { ResearchBudget } from '../prospecting/research-budget.ts';
 import type { RunContext } from '../prospecting/run-context.ts';
 import { getCompany, recordCompanyOutcome } from '../tools/hubspot-companies.ts';
+import { findContactEmail } from '../tools/email-finder.ts';
 import { createContact, listEligibleContacts } from '../tools/hubspot-contacts.ts';
 import { sendOutreachEmail } from '../tools/hubspot-outreach.ts';
 import { postRunSummary } from '../tools/slack-summary.ts';
@@ -49,8 +50,9 @@ export function Prospecting() {
 		knowledge,
 		crm: new Crm(),
 		ledger: new OutreachLedger(dailyCap()),
-		research: new ResearchBudget(),
+		research: new ResearchBudget({ fetches: 4, searches: 3, lookups: hunterLookupsPerCompany() }),
 		fetchedUrls: new Set(),
+		verifiedEmails: new Map(),
 		settings: {
 			outreachEnabled: sending,
 			dailyCap: dailyCap(),
@@ -61,11 +63,16 @@ export function Prospecting() {
 		},
 	};
 
+	// Stable per deployment: the key is an env secret, so hook order cannot
+	// change between renders of the same deploy.
+	const lookupsEnabled = hunterApiKey() !== undefined && hunterLookupsPerCompany() > 0;
+
 	useTool(getCompany(context));
 	useTool(listEligibleContacts(context));
 	useTool(createContact(context));
 	useTool(fetchPage(context));
 	useTool(webSearch(context));
+	if (lookupsEnabled) useTool(findContactEmail(context));
 	useTool(sendOutreachEmail(context));
 	useTool(recordCompanyOutcome(context));
 	useTool(postRunSummary(context));
@@ -93,9 +100,14 @@ ${batchList}
    If step 2 returned nobody, you get extra discovery budget — spend it finding a named person in a target persona:
    - Fetch people-oriented pages: follow team/about/staff/leadership/contact links you saw on pages already fetched, and try common paths (/about, /team, /staff, /contact, /leadership).
    - A failed fetch is not charged to your budget — try the obvious alternate (/contact-us for /contact, /about-us for /about, the www or bare-domain variant) instead of giving up.
-   - web_search for people: the company name plus a persona title ("<company> director of sales"), press releases, local news naming staff.
-   - A search snippet is NOT evidence — fetch the result page before using a person you found there.
-   If discovery surfaced a named person in a target persona with an email on the company domain, on a page you fetched this run, create_contact once. If not, the company will be skipped: keep note of every URL you tried and every query you ran — the skip record must list them.
+   - web_search for people: the company name plus a persona title ("<company> director of sales"), press releases, local news naming staff. A snippet that names a person and title (LinkedIn results often do) is a LEAD even when the page itself cannot be fetched — note the person and the result URL.${
+		lookupsEnabled
+			? `
+   - find_contact_email turns leads into addresses: pass a lead's name to find their address, or call it with no name to list people the provider knows at the domain. Only results marked verified:true may be used with create_contact.`
+			: ''
+	}
+   - A search snippet is NOT evidence for outreach claims — fetch the result page before citing anything from it in an email.
+   If discovery surfaced a named person in a target persona with an email on the company domain — found on a page you fetched this run${lookupsEnabled ? ', or verified by find_contact_email' : ''} — create_contact once. If not, the company will be skipped: keep note of every URL you tried, every query you ran, and every lead you found (name, title, source) — the skip record must list them all.
 4. For each returned contact, write ONE email following the messaging guidelines exactly: one specific, true thing about them (from research or their record), one offering and the outcome it produces, one low-friction ask, first name only as sign-off. Every specific claim must be backed by an item in \`evidence\` — a URL you fetched this run or hubspot:<property>. No evidence, no claim.
 5. send_outreach_email — once per contact. If it returns problems, revise and call again. If it returns ok: false for any other reason, or uncertain: true, do NOT call it again for that contact; carry the outcome into the record.
 6. record_company_outcome — exactly once per company, including skipped ones (status "skipped" with skipReason), listing the sources you actually used. When you skip for lack of a contact, the summary must document your discovery attempts: the URLs you tried (including failures) and the searches you ran, so a human can pick up where you stopped.

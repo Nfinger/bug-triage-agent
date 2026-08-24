@@ -28,6 +28,12 @@ export interface RunContext {
 	research: ResearchBudget;
 	/** URLs successfully fetched this run, accepted as outreach evidence. */
 	fetchedUrls: Set<string>;
+	/**
+	 * Emails the provider verified this run (lowercased email → record).
+	 * Written only by the lookup tool; create_contact accepts these as its
+	 * second evidence path.
+	 */
+	verifiedEmails: Map<string, { firstName: string | null; lastName: string | null; title: string | null; score: number; source: string }>;
 	settings: {
 		outreachEnabled: boolean;
 		dailyCap: number;
