@@ -13,7 +13,14 @@ type ToolError = { ok: false; error: string };
 
 type ListOutput =
 	| ToolError
-	| { ok: true; companyDomain: string | null; contacts: ReturnType<typeof present>[]; moreEligible: number; excludedByReason: Record<string, number> };
+	| {
+			ok: true;
+			companyDomain: string | null;
+			contacts: ReturnType<typeof present>[];
+			moreEligible: number;
+			excludedByReason: Record<string, number>;
+			discovery: string | null;
+	  };
 type CreateOutput = ToolError | { ok: true; contactId: string; email: string };
 
 function errorOutput(error: unknown): ToolError {
@@ -69,6 +76,14 @@ export function listEligibleContacts(context: RunContext) {
 				for (const excluded of evaluation.data.excluded) {
 					excludedByReason[excluded.reason] = (excludedByReason[excluded.reason] ?? 0) + 1;
 				}
+				// The bonus is decided here, in code, off the same evaluation the
+				// send tool re-runs — the model cannot ask for more budget.
+				let discovery: string | null = null;
+				if (evaluation.data.eligible.length === 0) {
+					context.research.grantDiscoveryBonus(data.companyId);
+					discovery =
+						'No eligible contacts: discovery research budget granted. Research the company site (team/about/staff/leadership/contact pages) and search for a named person in a target persona with an email on the company domain, then create_contact if you find one.';
+				}
 				return {
 					output: {
 						ok: true,
@@ -76,6 +91,7 @@ export function listEligibleContacts(context: RunContext) {
 						contacts: evaluation.data.eligible.slice(0, context.settings.contactsPerCompany).map(present),
 						moreEligible: Math.max(0, evaluation.data.eligible.length - context.settings.contactsPerCompany),
 						excludedByReason,
+						discovery,
 					},
 				};
 			} catch (error) {

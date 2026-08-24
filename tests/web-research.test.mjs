@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { ResearchBudget } from '../src/prospecting/research-budget.ts';
 import { MAX_PAGE_TEXT_BYTES, canonicalUrl, clipText, fetchPageText, htmlToText, urlRefusal } from '../src/prospecting/web.ts';
+import { fetchPage } from '../src/tools/web-research.ts';
 
 test('SSRF guard refuses internal, private, and non-http targets', () => {
 	const refused = [
@@ -77,8 +78,92 @@ test('research budget is per company and per kind', () => {
 	assert.equal(budget.take('a', 'searches'), true);
 	assert.equal(budget.take('a', 'searches'), false);
 	assert.equal(budget.take('b', 'fetches'), true);
-	assert.deepEqual(budget.remaining('a'), { fetches: 0, searches: 0 });
-	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1 });
+	assert.deepEqual(budget.remaining('a'), { fetches: 0, searches: 0, fetchAttempts: 6 });
+	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, fetchAttempts: 6 });
+});
+
+test('discovery bonus expands both allowances and is granted at most once', () => {
+	const budget = new ResearchBudget({ fetches: 1, searches: 1 }, { discoveryBonus: { fetches: 2, searches: 1 }, extraAttempts: 4 });
+	assert.equal(budget.take('a', 'fetches'), true);
+	assert.equal(budget.take('a', 'fetches'), false);
+	assert.equal(budget.grantDiscoveryBonus('a'), true);
+	assert.equal(budget.grantDiscoveryBonus('a'), false);
+	assert.deepEqual(budget.remaining('a'), { fetches: 2, searches: 2, fetchAttempts: 7 });
+	assert.equal(budget.take('a', 'fetches'), true);
+	assert.equal(budget.take('a', 'searches'), true);
+	assert.equal(budget.take('a', 'searches'), true);
+	assert.equal(budget.take('a', 'searches'), false);
+	assert.deepEqual(budget.remaining('b'), { fetches: 1, searches: 1, fetchAttempts: 5 });
+});
+
+test('refunds restore a unit but never go below zero used', () => {
+	const budget = new ResearchBudget({ fetches: 1, searches: 1 });
+	assert.equal(budget.take('a', 'fetches'), true);
+	budget.refund('a', 'fetches');
+	assert.equal(budget.remaining('a').fetches, 1);
+	budget.refund('a', 'fetches');
+	assert.equal(budget.remaining('a').fetches, 1, 'refund without a matching take must not raise the allowance');
+	assert.equal(budget.take('a', 'fetches'), true);
+	assert.equal(budget.take('a', 'fetches'), false);
+});
+
+test('attempt cap blocks fetch attempts even while fetch budget remains', () => {
+	const budget = new ResearchBudget({ fetches: 3, searches: 1 }, { extraAttempts: 1 });
+	for (let i = 0; i < 4; i++) assert.equal(budget.takeAttempt('a'), true, `attempt ${i + 1}`);
+	assert.equal(budget.takeAttempt('a'), false);
+	assert.equal(budget.remaining('a').fetches, 3, 'attempts alone must not consume the fetch budget');
+	assert.equal(budget.remaining('a').fetchAttempts, 0);
+});
+
+function toolContext(research) {
+	return {
+		runDate: '2026-08-23',
+		now: () => new Date('2026-08-23T13:00:00Z'),
+		batch: [{ companyId: 'c1', name: 'Acme', domain: 'acme.io', score: 55, signals: [] }],
+		knowledge: { prose: '', icp: { industries: [], sizeRanges: [], geographies: [], personaTitlePatterns: [], excludedDomains: [] }, messaging: {} },
+		ledger: { has: () => undefined },
+		research,
+		fetchedUrls: new Set(),
+		settings: { outreachEnabled: false, dailyCap: 5, cooldownDays: 30, contactsPerCompany: 1, senderEmail: 'x@ourco.com', templateId: () => 1 },
+	};
+}
+
+test('a failed fetch is refunded but attempts stay bounded', async () => {
+	const research = new ResearchBudget({ fetches: 2, searches: 1 }, { extraAttempts: 1 });
+	const context = toolContext(research);
+	const doFetch = async () => new Response('nope', { status: 400, headers: { 'content-type': 'text/html' } });
+	const tool = fetchPage(context, doFetch);
+
+	const first = await tool.run({ data: { companyId: 'c1', url: 'https://acme.io/contact' }, log: { info() {} } });
+	assert.equal(first.output.ok, false);
+	assert.match(first.output.error, /fetch budget not charged/);
+	assert.equal(research.remaining('c1').fetches, 2, 'a 400 must leave the fetch budget untouched');
+	assert.equal(context.fetchedUrls.size, 0);
+
+	// Attempt cap is fetches (2) + extraAttempts (1) = 3: two more failures allowed, then capped.
+	const second = await tool.run({ data: { companyId: 'c1', url: 'https://acme.io/contact-us' }, log: { info() {} } });
+	assert.equal(second.output.ok, false);
+	const third = await tool.run({ data: { companyId: 'c1', url: 'https://acme.io/about' }, log: { info() {} } });
+	assert.equal(third.output.ok, false);
+	const capped = await tool.run({ data: { companyId: 'c1', url: 'https://acme.io/team' }, log: { info() {} } });
+	assert.equal(capped.output.ok, false);
+	assert.match(capped.output.error, /attempt cap reached/i);
+	assert.equal(research.remaining('c1').fetches, 2, 'the budget survives even when attempts run out');
+});
+
+test('a successful fetch still charges the budget and records evidence URLs', async () => {
+	const research = new ResearchBudget({ fetches: 1, searches: 1 });
+	const context = toolContext(research);
+	const doFetch = async () =>
+		new Response('<html><title>Team</title><body><p>Pat Smith, GM — pat@acme.io</p></body></html>', {
+			status: 200,
+			headers: { 'content-type': 'text/html' },
+		});
+	const tool = fetchPage(context, doFetch);
+	const result = await tool.run({ data: { companyId: 'c1', url: 'https://acme.io/team' }, log: { info() {} } });
+	assert.equal(result.output.ok, true);
+	assert.equal(result.output.remainingFetches, 0);
+	assert.ok(context.fetchedUrls.has(canonicalUrl('https://acme.io/team')));
 });
 
 test('evidence URLs are matched canonically across slash, www, hash, and case variants', () => {

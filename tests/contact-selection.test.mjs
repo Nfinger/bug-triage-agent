@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import { evaluateContacts, exclusionReason } from '../src/prospecting/contacts.ts';
+import { Crm } from '../src/prospecting/crm.ts';
+import { ResearchBudget } from '../src/prospecting/research-budget.ts';
+import { listEligibleContacts } from '../src/tools/hubspot-contacts.ts';
 
 const NOW = new Date('2026-08-23T13:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -71,4 +74,71 @@ test('survivors are ranked: inbound activity, then persona order, then seniority
 			['gone', 'unsubscribed'],
 		],
 	);
+});
+
+// Tool-level: the discovery bonus is granted by code when nobody is eligible.
+
+function scriptedCrm(contacts) {
+	const client = {
+		async call(request) {
+			if (request.method === 'GET' && request.path === '/crm/v3/objects/companies/c1') {
+				return {
+					ok: true,
+					data: {
+						id: 'c1',
+						properties: { name: 'Acme', domain: 'acme.io' },
+						associations: { contacts: { results: contacts.map((c) => ({ id: c.id, type: 'company_to_contact' })) } },
+					},
+				};
+			}
+			if (request.path === '/crm/v3/objects/contacts/batch/read') {
+				return { ok: true, data: { results: contacts } };
+			}
+			throw new Error(`unexpected call ${request.method} ${request.path}`);
+		},
+	};
+	return new Crm(client);
+}
+
+function listContext(contacts, research) {
+	return {
+		runDate: '2026-08-23',
+		now: () => NOW,
+		batch: [{ companyId: 'c1', name: 'Acme', domain: 'acme.io', score: 55, signals: [] }],
+		knowledge: { prose: '', icp, messaging: {} },
+		crm: scriptedCrm(contacts),
+		ledger: { has: () => undefined },
+		research,
+		fetchedUrls: new Set(),
+		settings: { outreachEnabled: false, dailyCap: 5, cooldownDays: 30, contactsPerCompany: 1, senderEmail: 'x@ourco.com', templateId: () => 1 },
+	};
+}
+
+const log = { info() {}, warn() {}, error() {}, debug() {} };
+
+test('zero eligible contacts grants the discovery bonus exactly once', async () => {
+	const research = new ResearchBudget({ fetches: 4, searches: 3 }, { discoveryBonus: { fetches: 3, searches: 2 } });
+	const tool = listEligibleContacts(listContext([contact('eng', { jobtitle: 'Staff Engineer' })], research));
+
+	const first = await tool.run({ data: { companyId: 'c1' }, log });
+	assert.equal(first.output.ok, true);
+	assert.deepEqual(first.output.contacts, []);
+	assert.match(first.output.discovery, /discovery research budget granted/);
+	assert.equal(research.remaining('c1').fetches, 7);
+	assert.equal(research.remaining('c1').searches, 5);
+
+	const second = await tool.run({ data: { companyId: 'c1' }, log });
+	assert.equal(second.output.ok, true);
+	assert.equal(research.remaining('c1').fetches, 7, 're-listing must not stack another bonus');
+});
+
+test('an eligible contact means no discovery bonus', async () => {
+	const research = new ResearchBudget({ fetches: 4, searches: 3 });
+	const tool = listEligibleContacts(listContext([contact('pm', { jobtitle: 'Product Manager' })], research));
+	const result = await tool.run({ data: { companyId: 'c1' }, log });
+	assert.equal(result.output.ok, true);
+	assert.equal(result.output.contacts.length, 1);
+	assert.equal(result.output.discovery, null);
+	assert.equal(research.remaining('c1').fetches, 4);
+	assert.equal(research.remaining('c1').searches, 3);
 });

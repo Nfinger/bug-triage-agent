@@ -102,8 +102,9 @@ export function recordCompanyOutcome(context: RunContext) {
 		name: 'record_company_outcome',
 		description:
 			'Record what this run did for one selected company: a note on the company with the outcome, ' +
-			'contacts, and research sources; a follow-up task for the owner when an email was sent; and the ' +
-			'company\'s last-prospected date. Call exactly once per company, after sending or deciding to skip.',
+			'contacts, and research sources; a follow-up task for the owner when an email was sent, or a ' +
+			'find-a-contact task when the company was skipped with nobody to email; and the company\'s ' +
+			'last-prospected date. Call exactly once per company, after sending or deciding to skip.',
 		input: v.object({
 			companyId: v.pipe(v.string(), v.minLength(1)),
 			status: v.picklist(['sent', 'drafted', 'skipped']),
@@ -141,18 +142,34 @@ export function recordCompanyOutcome(context: RunContext) {
 				if (!note.ok) return { output: { ok: false, error: note.error } };
 
 				let taskId: string | null = null;
-				if (anySent || anyUncertain) {
+				const needsFollowUp = anySent || anyUncertain;
+				// A skip with no contacts at all means the agent found nobody to
+				// email and couldn't create anyone — that's a human's job now.
+				const noContactSkip = !needsFollowUp && data.status === 'skipped' && contacts.length === 0;
+				if (needsFollowUp || noContactSkip) {
 					const company = await context.crm.getCompany(data.companyId);
 					const ownerId = company.ok ? company.data.properties.hubspot_owner_id ?? undefined : undefined;
 					const dueAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
-					const task = await context.crm.createTask(data.companyId, {
-						subject: `Follow up: prospecting outreach to ${entry.name} (${context.runDate})`,
-						body: `The prospecting agent emailed ${contacts.filter((c) => c.status !== 'skipped').map((c) => c.email).join(', ')} on ${context.runDate}. Check for a reply and follow up.`,
-						ownerId,
-						dueAt,
-					});
+					const task = await context.crm.createTask(
+						data.companyId,
+						needsFollowUp
+							? {
+									subject: `Follow up: prospecting outreach to ${entry.name} (${context.runDate})`,
+									body: `The prospecting agent emailed ${contacts.filter((c) => c.status !== 'skipped').map((c) => c.email).join(', ')} on ${context.runDate}. Check for a reply and follow up.`,
+									ownerId,
+									dueAt,
+								}
+							: {
+									subject: `Find a contact: prospecting agent found nobody to email at ${entry.name} (${context.runDate})`,
+									body:
+										`${entry.name} scored ${entry.score} on buying signals but has no eligible contact in HubSpot, and research found no named person to add.` +
+										`${data.skipReason ? ` ${data.skipReason}` : ''} See the company note from ${context.runDate} for what was tried.`,
+									ownerId,
+									dueAt,
+								},
+					);
 					if (!task.ok) {
-						log.warn('follow-up task not created', { companyId: data.companyId, error: task.error });
+						log.warn(needsFollowUp ? 'follow-up task not created' : 'find-a-contact task not created', { companyId: data.companyId, error: task.error });
 					} else {
 						taskId = task.data.id;
 					}
