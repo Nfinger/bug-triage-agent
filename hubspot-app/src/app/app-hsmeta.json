@@ -1,0 +1,39 @@
+{
+	"uid": "prospecting_agent_app",
+	"type": "app",
+	"config": {
+		"description": "Static-auth credentials for the outbound prospecting agent (Cloudflare Worker). Reads companies/contacts/deals for buying-signal scoring, writes notes/tasks/contacts for the audit trail, and sends outreach via transactional single-send.",
+		"name": "Prospecting Agent",
+		"distribution": "private",
+		"auth": {
+			"type": "static",
+			"requiredScopes": [
+				"oauth",
+				"crm.objects.companies.read",
+				"crm.objects.companies.write",
+				"crm.objects.contacts.read",
+				"crm.objects.contacts.write",
+				"crm.objects.deals.read",
+				"crm.schemas.companies.read",
+				"crm.schemas.companies.write",
+				"crm.schemas.contacts.read",
+				"crm.schemas.contacts.write"
+			],
+			"optionalScopes": [],
+			"conditionallyRequiredScopes": []
+		},
+		"permittedUrls": {
+			"fetch": [
+				"https://api.hubapi.com"
+			],
+			"iframe": [],
+			"img": []
+		},
+		"support": {
+			"supportEmail": "nfinger1020@gmail.com",
+			"documentationUrl": "https://github.com/placeholder/bug-triage-agent#daily-prospecting",
+			"supportUrl": "https://github.com/placeholder/bug-triage-agent",
+			"supportPhone": "+18005555555"
+		}
+	}
+}

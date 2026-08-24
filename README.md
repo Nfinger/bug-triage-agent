@@ -18,7 +18,7 @@ Slack bug channel → BugTriage agent → GitHub issue (+ agent-fix label)
               branch + passing checks → pull request → comment on issue
 ```
 
-Separately, a [weekly architecture review](#weekly-architecture-review) runs on a Friday cron: a scheduled agent reviews one aspect of the system and files its findings as a GitHub issue.
+Separately, a [weekly architecture review](#weekly-architecture-review) runs on a Friday cron: a scheduled agent reviews one aspect of the system and files its findings as a GitHub issue. And a [daily prospecting run](#daily-prospecting) turns HubSpot buying signals into researched, personalized outreach.
 
 ## Setup
 
@@ -37,6 +37,16 @@ Requirements: a Cloudflare account with Workers Paid (Containers) enabled, and `
 3. Under *Event Subscriptions*, enable events and set the Request URL to `<base-url>/channels/slack/events` (for local dev, expose `http://localhost:5173` with a tunnel). The URL-verification handshake is answered automatically. **Make sure Socket Mode is off** (*Socket Mode* page in the app settings) — with it on, Slack routes events to a WebSocket instead of the Request URL and nothing ever arrives, silently.
 4. Subscribe to the **`message.channels`** bot event, which requires the **`channels:history`** bot scope, then install the app to the workspace. If the bug-report channel is **private**, subscribe to **`message.groups`** (scope `groups:history`) instead — and note that after changing events or scopes you must save and **reinstall** the app before Slack delivers anything.
 5. Invite the app to your bug-report channel (`/invite @your-app`) and put that channel's ID (e.g. `C0123456789`, shown in the channel's details pane) in `SLACK_BUG_CHANNEL_ID`.
+
+The same Slack app also posts the prospecting run's summary. Give it the **`chat:write`** bot scope, copy the **Bot User OAuth Token** into `SLACK_BOT_TOKEN`, invite the app to the channel that should receive summaries, and put that channel's ID in `SLACK_PROSPECTING_CHANNEL_ID`.
+
+### HubSpot (prospecting)
+
+1. In HubSpot, create a **private app** (*Settings → Integrations → Private Apps*) with scopes `crm.objects.companies.read` + `.write`, `crm.objects.contacts.read` + `.write`, `crm.objects.deals.read`, `crm.schemas.companies.read` + `.write`, `crm.schemas.contacts.read` + `.write`, `sales-email-read`, and `transactional-email`. Put its token in `HUBSPOT_ACCESS_TOKEN`.
+2. Create the custom properties the run writes and filters on: `node --env-file=.dev.vars scripts/setup-hubspot-properties.mjs` (idempotent; the run refuses to start if they are missing).
+3. Set `HUBSPOT_SENDER_EMAIL` to an address on a verified HubSpot sending domain.
+4. Only when you are ready to send for real: create a **transactional email** template (*Marketing → Email*, requires the Transactional Email add-on) whose subject is `{{ custom.subject }}` and whose body renders `{{ custom.body }}` above your legal footer and unsubscribe link, and put its id in `HUBSPOT_OUTREACH_TEMPLATE_ID`. Draft mode never needs this.
+5. Put a [Brave Search API](https://brave.com/search/api/) key in `WEB_SEARCH_API_KEY` for the research tools.
 
 ### GitHub (issue filing + coding agent)
 
@@ -75,6 +85,30 @@ Changing when it runs means editing `triggers.crons` in `wrangler.jsonc` and red
 Configuration (see `.env.example`): `ARCH_REVIEW_ENABLED`, `ARCH_REVIEW_LABEL`, and `ARCH_REVIEW_REPO` (the repo under review; defaults to `GITHUB_REPO`). `GITHUB_TOKEN` already carries the contents-read the review needs for the coding agent's sake. Setting `ARCH_REVIEW_ENABLED=false` makes a fire a no-op without removing the trigger.
 
 Two things to know about scheduled runs: Cloudflare delivers them **at-least-once**, and a run's conversation ID and idempotency key are both the fire's date, so a repeated fire for the same Friday is a no-op rather than a second issue. Local `npm run dev` does not fire cron triggers — to exercise a run locally, call `dispatchArchitectureReview(new Date())` directly.
+
+## Daily prospecting
+
+Every weekday at 13:00 UTC, the `Prospecting` agent finds accounts in HubSpot that look ready to buy, researches them, picks the right people, writes each one a personalized email, sends it through HubSpot, and records everything it did back on the CRM. A summary of the run lands in Slack.
+
+How it flows: a Cloudflare Cron Trigger fires → `scheduled()` in `src/cloudflare.ts` calls `dispatchProspecting` (`src/schedules/prospecting.ts`) → **selection happens in code, before the agent runs**: `src/prospecting/select-batch.ts` pulls recently active companies from HubSpot, `src/prospecting/scoring.ts` scores them from buying signals (form submissions, site visits, open deals, lifecycle-stage advances, recent engagement, ICP fit) with fixed weights, drops customers, closed-won accounts, `do_not_prospect`, and anything prospected within the cooldown, and keeps the top `PROSPECTING_BATCH_SIZE` → the batch is dispatched to the agent (`src/agents/prospecting.ts`), one conversation per run keyed by the date → for each company the agent reads the record, researches the company site and recent news (`src/tools/web-research.ts`), gets the eligible contacts (`src/tools/hubspot-contacts.ts`), writes and sends (`src/tools/hubspot-outreach.ts`), and records a note (+ a follow-up task for the owner when something was sent) on the company (`src/tools/hubspot-companies.ts`) → finally it posts the run summary to Slack (`src/tools/slack-summary.ts`).
+
+```
+HubSpot signals ──(scored in code)──▶ daily batch ──▶ Prospecting agent
+                                                         │  research · pick contacts · write · send
+                                                         ▼
+                                      HubSpot: email on timeline, note + task on company
+                                      Slack: one run summary
+```
+
+**What the agent knows.** Its understanding of the business lives in `docs/business/` — `company.md`, `products.md`, `icp.md`, `messaging.md` — bundled at build time and put in every prompt. Two of them carry a fenced `json` block that the code enforces: the ICP (target industries, sizes, geographies, persona title patterns, excluded domains) drives scoring and contact selection; the messaging limits (max words, banned phrases) are applied by the send tool, which rejects a message that breaks them. Edit the docs, redeploy, and the agent's behaviour changes. Start by replacing the placeholder content.
+
+**Guardrails live in the tools, not the prompt.** The agent can only read or write companies in its batch. It only ever sees contacts that survive the hard exclusions (unsubscribed, bounced, do-not-contact, off-domain, emailed within the cooldown, no persona match), and the send tool re-checks eligibility and takes the recipient address from the CRM record at send time. Every message must cite evidence — a URL fetched during this run or a `hubspot:<property>` reference — or it is rejected. A contact is sent to at most once per run, a send whose outcome is unknown is never retried, and `OUTREACH_DAILY_CAP` bounds real sends per run. Research fetches refuse private addresses and are budgeted per company.
+
+**Rollout and rollback.** The run ships with `OUTREACH_ENABLED=false`: everything happens except the send, which instead stores the email as a *Draft outreach* note on the contact. Watch a few days of draft notes, company outcome notes, and Slack summaries; tune `docs/business/` and the weights in `src/prospecting/scoring.ts`; then create the transactional template, set `HUBSPOT_OUTREACH_TEMPLATE_ID`, and flip `OUTREACH_ENABLED=true` with a low cap. `OUTREACH_ENABLED=false` stops sending immediately without a redeploy; `PROSPECTING_ENABLED=false` stops runs altogether. Changing *when* it runs means editing `triggers.crons` in `wrangler.jsonc` (UTC only) and the matching `CRON` entry in `src/cloudflare.ts`.
+
+Configuration (see `.env.example`): `PROSPECTING_ENABLED`, `OUTREACH_ENABLED`, `PROSPECTING_BATCH_SIZE`, `OUTREACH_DAILY_CAP`, `OUTREACH_COOLDOWN_DAYS`, `OUTREACH_CONTACTS_PER_COMPANY`, `PROSPECTING_LOOKBACK_DAYS`, `HUBSPOT_ACCESS_TOKEN`, `HUBSPOT_SENDER_EMAIL`, `HUBSPOT_OUTREACH_TEMPLATE_ID`, `SLACK_BOT_TOKEN`, `SLACK_PROSPECTING_CHANNEL_ID`, `WEB_SEARCH_API_KEY`.
+
+Scheduled runs are delivered at-least-once and keyed by the fire's date, so a repeated fire for the same day is a no-op. Local `npm run dev` does not fire cron triggers — to exercise a run by hand against the dev server, `node --env-file=.dev.vars scripts/run-prospecting.mjs [YYYY-MM-DD]`. Point `HUBSPOT_ACCESS_TOKEN` at a test portal first.
 
 ## Deploy
 
