@@ -150,6 +150,32 @@ export class Crm {
 		return { ok: true, data: companies };
 	}
 
+	/** Find one company by exact domain match; null when none exists. */
+	async findCompanyByDomain(domain: string): Promise<HubspotResult<CompanyRecord | null>> {
+		const result = await this.client.call<Page<RawObject>>({
+			method: 'POST',
+			path: '/crm/v3/objects/companies/search',
+			body: {
+				filterGroups: [{ filters: [{ propertyName: 'domain', operator: 'EQ', value: domain }] }],
+				properties: COMPANY_PROPERTIES,
+				limit: 1,
+			},
+		});
+		if (!result.ok) return result;
+		const raw = result.data.results[0];
+		return { ok: true, data: raw ? { id: raw.id, properties: raw.properties, contactIds: [], dealIds: [] } : null };
+	}
+
+	/** Remove the cooldown stamp so the next selection may pick the company again. */
+	async clearProspected(companyId: string): Promise<HubspotResult<unknown>> {
+		return this.client.call({
+			method: 'PATCH',
+			path: `/crm/v3/objects/companies/${encodeURIComponent(companyId)}`,
+			// An empty string clears a HubSpot property.
+			body: { properties: { last_prospected_at: '' } },
+		});
+	}
+
 	private async batchRead(objectType: 'contacts' | 'deals', ids: string[], properties: readonly string[]): Promise<HubspotResult<CrmObject[]>> {
 		if (ids.length === 0) return { ok: true, data: [] };
 		const objects: CrmObject[] = [];

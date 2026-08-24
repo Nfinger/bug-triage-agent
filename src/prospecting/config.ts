@@ -119,6 +119,14 @@ export function webSearchApiKey(): string {
 }
 
 /**
+ * Bearer token for the operator-only manual-run endpoint. Unset (the
+ * default) means the endpoint does not exist: it responds 404.
+ */
+export function manualRunToken(): string | undefined {
+	return env('PROSPECTING_MANUAL_TOKEN');
+}
+
+/**
  * Validate everything a run needs before any CRM read or write. Called by the
  * dispatcher so a misconfigured deploy fails at the fire, not mid-run.
  */

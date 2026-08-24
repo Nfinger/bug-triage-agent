@@ -16,19 +16,23 @@ export function runDateOf(firedAt: Date): string {
 	return firedAt.toISOString().slice(0, 10);
 }
 
+export type DispatchResult = { dispatched: boolean; selected: number; considered: number };
+
 /**
  * Dispatch one run. Exported so a run can also be started by hand
- * (scripts/run-prospecting.mjs); the date-keyed conversation ID and
- * idempotency key mean a repeat for the same day is a no-op, which also
- * covers Cloudflare's at-least-once scheduled delivery.
+ * (scripts/run-prospecting.mjs, or the manual-run endpoint); the date-keyed
+ * conversation ID and idempotency key mean a repeat for the same day is a
+ * no-op, which also covers Cloudflare's at-least-once scheduled delivery.
+ * A manual `runId` opts out of that daily key on purpose — one-off runs get
+ * their own conversation.
  */
-export async function dispatchProspecting(firedAt: Date): Promise<void> {
+export async function dispatchProspecting(firedAt: Date, options: { runId?: string } = {}): Promise<DispatchResult> {
 	if (!prospectingEnabled()) {
 		console.log('[prospecting] skipped (PROSPECTING_ENABLED=false)');
-		return;
+		return { dispatched: false, selected: 0, considered: 0 };
 	}
 	const runDate = runDateOf(firedAt);
-	const conversationId = `prospecting-${runDate}`;
+	const conversationId = options.runId ?? `prospecting-${runDate}`;
 	const poster = slackPoster();
 
 	let selection: Awaited<ReturnType<typeof selectBatch>>;
@@ -52,7 +56,7 @@ export async function dispatchProspecting(firedAt: Date): Promise<void> {
 	if (selection.selected.length === 0) {
 		console.log(`[prospecting] ${runDate}: 0 of ${selection.considered} companies selected (${exclusions || 'none excluded'})`);
 		await poster.post(preRunSummary(runDate, `0 accounts selected from ${selection.considered} considered${exclusions ? ` (${exclusions})` : ''}`));
-		return;
+		return { dispatched: false, selected: 0, considered: selection.considered };
 	}
 
 	try {
@@ -79,10 +83,11 @@ export async function dispatchProspecting(firedAt: Date): Promise<void> {
 		// already handled — absorb it instead of letting scheduled() throw.
 		if (error instanceof Error && /idempotency/i.test(error.message)) {
 			console.log(`[prospecting] duplicate fire for ${runDate} ignored`);
-			return;
+			return { dispatched: false, selected: selection.selected.length, considered: selection.considered };
 		}
 		throw error;
 	}
 
 	console.log(`[prospecting] dispatched ${conversationId} (${selection.selected.length} of ${selection.considered} companies; excluded: ${exclusions || 'none'})`);
+	return { dispatched: true, selected: selection.selected.length, considered: selection.considered };
 }
