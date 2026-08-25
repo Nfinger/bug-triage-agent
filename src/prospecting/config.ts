@@ -141,6 +141,16 @@ export function hunterLookupsPerCompany(): number {
 	return integer('HUNTER_LOOKUPS_PER_COMPANY', 2, { min: 0, max: 10 });
 }
 
+/** Scheduled sourcing runs are skipped entirely when this is turned off. */
+export function sourcingEnabled(): boolean {
+	return flag('SOURCING_ENABLED', true);
+}
+
+/** Companies the sourcing run may create per run. */
+export function sourcingMaxCompanies(): number {
+	return integer('SOURCING_MAX_COMPANIES', 5, { min: 1, max: 25 });
+}
+
 /**
  * Validate everything a run needs before any CRM read or write. Called by the
  * dispatcher so a misconfigured deploy fails at the fire, not mid-run.

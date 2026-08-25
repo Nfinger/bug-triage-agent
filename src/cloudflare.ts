@@ -5,12 +5,14 @@ export { Sandbox } from '@cloudflare/sandbox';
 
 import { dispatchArchitectureReview } from './schedules/architecture-review.ts';
 import { dispatchProspecting } from './schedules/prospecting.ts';
+import { dispatchSourcing } from './schedules/sourcing.ts';
 
 // Cron expressions exactly as declared in wrangler.jsonc "triggers.crons" —
 // Cloudflare hands the matching expression back on each fire, which is how a
 // Worker with several triggers tells them apart.
 export const CRON = {
 	architectureReview: '0 9 * * 5',
+	sourcing: '0 12 * * 1-5',
 	prospecting: '0 13 * * 1-5',
 } as const;
 
@@ -23,6 +25,11 @@ export default {
 				// One weekly fire (Friday, UTC) → one architecture-review run. The
 				// agent is dispatch-only: no route is mounted for it.
 				await dispatchArchitectureReview(firedAt);
+				return;
+			case CRON.sourcing:
+				// One weekday fire (12:00 UTC) → one company-sourcing run, an
+				// hour ahead of prospecting so its finds enter today's pool.
+				await dispatchSourcing(firedAt);
 				return;
 			case CRON.prospecting:
 				// One weekday fire (13:00 UTC) → one prospecting run, likewise

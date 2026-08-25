@@ -4,6 +4,7 @@ import { channel as slack } from './channels/slack.ts';
 import { registerCodingFailsafe } from './failsafe.ts';
 import { setupObservability } from './observability.ts';
 import * as prospectingManual from './schedules/prospecting-manual.ts';
+import * as sourcingManual from './schedules/sourcing-manual.ts';
 
 setupObservability();
 // Fail-closed publication for coding runs: a failed submission checkpoints
@@ -20,8 +21,9 @@ app.route('/channels/slack', slack.route());
 // label being applied dispatches the Coding agent for that issue.
 app.route('/channels/github', github.route());
 
-// Operator-only one-off prospecting runs; 404 unless PROSPECTING_MANUAL_TOKEN
-// is configured and presented as a bearer token.
+// Operator-only one-off prospecting and sourcing runs; 404 unless
+// PROSPECTING_MANUAL_TOKEN is configured and presented as a bearer token.
 app.route('/schedules/prospecting', prospectingManual.route());
+app.route('/schedules/sourcing', sourcingManual.route());
 
 export default app;

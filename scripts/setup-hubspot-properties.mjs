@@ -35,6 +35,26 @@ const PROPERTIES = {
 				{ label: 'No', value: 'false', displayOrder: 1 },
 			],
 		},
+		// Also ensured automatically by the sourcing dispatcher at fire time;
+		// listed here so one-shot portal setup stays complete.
+		{
+			name: 'agent_sourced',
+			label: 'Sourced by agent',
+			description: 'True when the sourcing agent created this company from web research.',
+			type: 'bool',
+			fieldType: 'booleancheckbox',
+			options: [
+				{ label: 'Yes', value: 'true', displayOrder: 0 },
+				{ label: 'No', value: 'false', displayOrder: 1 },
+			],
+		},
+		{
+			name: 'agent_sourced_run',
+			label: 'Agent sourced run',
+			description: 'Date of the sourcing run that created this company. Drives the sourced-fresh scoring signal.',
+			type: 'date',
+			fieldType: 'date',
+		},
 	],
 	contacts: [
 		{

@@ -14,7 +14,7 @@ const MAX_RESET_DOMAINS = 10;
 type ResetResult = { domain: string; companyId: string | null; ok: boolean; error?: string };
 
 /** Digest comparison so a wrong token costs the same time as a near-miss. */
-async function tokenMatches(header: string | undefined, expected: string): Promise<boolean> {
+export async function tokenMatches(header: string | undefined, expected: string): Promise<boolean> {
 	const presented = header?.replace(/^Bearer\s+/i, '') ?? '';
 	const encoder = new TextEncoder();
 	const [a, b] = await Promise.all([

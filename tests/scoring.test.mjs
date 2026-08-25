@@ -113,3 +113,48 @@ test('geography fit matches state name, state code, or country', () => {
 	);
 	assert.ok(!elsewhere.signals.some((s) => s.signal === 'icp-fit'));
 });
+
+test('sourced-fresh makes a fit-only sourced company selectable, below warm accounts', () => {
+	const sourced = snapshot('sourced', {
+		agent_sourced: 'true',
+		agent_sourced_run: String(NOW.getTime() - 2 * DAY),
+		industry: 'COMPUTER_SOFTWARE',
+		numberofemployees: '50',
+		country: 'United States',
+	});
+	const scored = scoreCompany(sourced, options);
+	assert.deepEqual(
+		scored.signals.map((s) => s.signal),
+		['sourced-fresh', 'icp-fit'],
+	);
+	assert.equal(scored.score, DEFAULT_WEIGHTS.sourcedFresh + DEFAULT_WEIGHTS.icpFit);
+
+	const warm = snapshot('warm', {
+		recent_conversion_date: String(NOW.getTime() - DAY),
+		industry: 'COMPUTER_SOFTWARE',
+		numberofemployees: '50',
+		country: 'United States',
+	});
+	const { selected } = rankCompanies([sourced, warm], options, 5);
+	assert.deepEqual(
+		selected.map((entry) => entry.companyId),
+		['warm', 'sourced'],
+		'a real inbound signal must outrank sourced-fresh',
+	);
+});
+
+test('sourced-fresh expires with the lookback window', () => {
+	const stale = snapshot('stale', {
+		agent_sourced: 'true',
+		agent_sourced_run: String(NOW.getTime() - 31 * DAY),
+		industry: 'COMPUTER_SOFTWARE',
+		numberofemployees: '50',
+		country: 'United States',
+	});
+	const { selected, excluded } = rankCompanies([stale], options, 5);
+	assert.equal(selected.length, 0);
+	assert.equal(excluded['no-signal'], 1);
+
+	const unsourced = snapshot('plain', { agent_sourced_run: String(NOW.getTime() - DAY) });
+	assert.ok(!scoreCompany(unsourced, options).signals.some((s) => s.signal === 'sourced-fresh'), 'the run date alone, without the marker, is not a signal');
+});

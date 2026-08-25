@@ -31,6 +31,8 @@ export const COMPANY_PROPERTIES = [
 	'description',
 	'last_prospected_at',
 	'do_not_prospect',
+	'agent_sourced',
+	'agent_sourced_run',
 ] as const;
 
 export const CONTACT_PROPERTIES = [
@@ -327,7 +329,66 @@ export class Crm {
 		if (result.status === 404) return { ok: true, data: false };
 		return result;
 	}
+
+	/** Create a custom property when the portal lacks it; a no-op when present. */
+	async ensureProperty(objectType: 'companies' | 'contacts', definition: PropertyDefinition): Promise<HubspotResult<unknown>> {
+		const exists = await this.hasProperty(objectType, definition.name);
+		if (!exists.ok) return exists;
+		if (exists.data) return { ok: true, data: 'exists' };
+		return this.client.call({
+			method: 'POST',
+			path: `/crm/v3/properties/${objectType}`,
+			body: { groupName: objectType === 'companies' ? 'companyinformation' : 'contactinformation', ...definition },
+		});
+	}
+
+	/** Create a company (sourcing only); the caller owns dedupe and evidence rules. */
+	async createCompany(properties: {
+		name: string;
+		domain: string;
+		state: string;
+		industry?: string;
+		agent_sourced: string;
+		agent_sourced_run: string;
+	}): Promise<HubspotResult<{ id: string }>> {
+		return this.client.call<{ id: string }>({
+			method: 'POST',
+			path: '/crm/v3/objects/companies',
+			body: { properties },
+		});
+	}
 }
+
+export interface PropertyDefinition {
+	name: string;
+	label: string;
+	description: string;
+	type: 'date' | 'bool' | 'string';
+	fieldType: 'date' | 'booleancheckbox' | 'text';
+	options?: { label: string; value: string; displayOrder: number }[];
+}
+
+/** Company properties the sourcing run writes; ensured at fire time. */
+export const SOURCING_PROPERTY_DEFINITIONS: PropertyDefinition[] = [
+	{
+		name: 'agent_sourced',
+		label: 'Sourced by agent',
+		description: 'True when the sourcing agent created this company from web research.',
+		type: 'bool',
+		fieldType: 'booleancheckbox',
+		options: [
+			{ label: 'Yes', value: 'true', displayOrder: 0 },
+			{ label: 'No', value: 'false', displayOrder: 1 },
+		],
+	},
+	{
+		name: 'agent_sourced_run',
+		label: 'Agent sourced run',
+		description: 'Date of the sourcing run that created this company. Drives the sourced-fresh scoring signal.',
+		type: 'date',
+		fieldType: 'date',
+	},
+];
 
 /** Custom properties created by scripts/setup-hubspot-properties.mjs. */
 export const CUSTOM_PROPERTIES = {

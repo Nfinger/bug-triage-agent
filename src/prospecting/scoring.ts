@@ -16,6 +16,13 @@ export interface Weights {
 	openDeal: number;
 	stageAdvance: number;
 	inboundEngagement: number;
+	/**
+	 * Recently created by the sourcing agent. The floor of the behavioural
+	 * weights on purpose: it makes a sourced company selectable at all (fit
+	 * alone is excluded as no-signal) without ever outranking a genuinely
+	 * warm account.
+	 */
+	sourcedFresh: number;
 	/** Maximum ICP-fit contribution; industry, size, and geography each earn a share. */
 	icpFit: number;
 }
@@ -26,6 +33,7 @@ export const DEFAULT_WEIGHTS: Weights = {
 	openDeal: 25,
 	stageAdvance: 20,
 	inboundEngagement: 20,
+	sourcedFresh: 15,
 	icpFit: 30,
 };
 
@@ -145,6 +153,10 @@ export function scoreCompany(snapshot: CompanySnapshot, options: ScoringOptions)
 	const inbound = Math.max(timestampMs(p.notes_last_contacted) ?? 0, timestampMs(p.hs_last_sales_activity_timestamp) ?? 0) || undefined;
 	if (within(inbound, options.now, options.lookbackDays)) {
 		signals.push({ signal: 'recent-engagement', weight: weights.inboundEngagement, detail: `last activity ${daysAgo(inbound!, options.now)}` });
+	}
+	const sourced = isTrue(p.agent_sourced) ? timestampMs(p.agent_sourced_run) : undefined;
+	if (within(sourced, options.now, options.lookbackDays)) {
+		signals.push({ signal: 'sourced-fresh', weight: weights.sourcedFresh, detail: `sourced by agent ${daysAgo(sourced!, options.now)}` });
 	}
 
 	// ICP fit: three equal shares of the icpFit weight.

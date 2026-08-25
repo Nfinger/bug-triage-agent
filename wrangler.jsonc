@@ -18,15 +18,18 @@
 		{ "tag": "sandbox-v1", "new_sqlite_classes": ["Sandbox"] },
 		{ "tag": "delete-flue-hello-agent", "deleted_classes": ["FlueHelloAgent"] },
 		{ "tag": "flue-class-FlueArchitectureReviewAgent", "new_sqlite_classes": ["FlueArchitectureReviewAgent"] },
-		{ "tag": "flue-class-FlueProspectingAgent", "new_sqlite_classes": ["FlueProspectingAgent"] }
+		{ "tag": "flue-class-FlueProspectingAgent", "new_sqlite_classes": ["FlueProspectingAgent"] },
+		{ "tag": "flue-class-FlueSourcingAgent", "new_sqlite_classes": ["FlueSourcingAgent"] }
 	],
 	// Cloudflare evaluates cron expressions in UTC only — there is no timezone
 	// option. Fires arrive in src/cloudflare.ts, which routes by expression
 	// (keep these in sync with CRON there):
 	//   "0 9 * * 5"    weekly architecture review, Friday 09:00 UTC
+	//   "0 12 * * 1-5" daily company sourcing, weekdays 12:00 UTC (an hour
+	//                  before prospecting, so finds enter the same day's pool)
 	//   "0 13 * * 1-5" daily prospecting, weekdays 13:00 UTC
 	"triggers": {
-		"crons": ["0 9 * * 5", "0 13 * * 1-5"]
+		"crons": ["0 9 * * 5", "0 12 * * 1-5", "0 13 * * 1-5"]
 	},
 	"durable_objects": {
 		"bindings": [{ "class_name": "Sandbox", "name": "Sandbox" }]
