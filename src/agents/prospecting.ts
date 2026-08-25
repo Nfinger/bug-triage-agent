@@ -1,11 +1,11 @@
 'use agent';
-import { useInitialData, useModel, useTool } from '@flue/runtime';
+import { useInitialData, useModel, usePersistentState, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { loadKnowledge } from '../prospecting/business-docs.ts';
 import { contactsPerCompany, cooldownDays, dailyCap, hunterApiKey, hunterLookupsPerCompany, outreachEnabled, outreachTemplateId, senderEmail } from '../prospecting/config.ts';
 import { Crm } from '../prospecting/crm.ts';
-import { OutreachLedger } from '../prospecting/ledger.ts';
-import { ResearchBudget } from '../prospecting/research-budget.ts';
+import { OutreachLedger, type LedgerEntry } from '../prospecting/ledger.ts';
+import { ResearchBudget, type ResearchSnapshot } from '../prospecting/research-budget.ts';
 import type { RunContext } from '../prospecting/run-context.ts';
 import { getCompany, recordCompanyOutcome } from '../tools/hubspot-companies.ts';
 import { findContactEmail } from '../tools/email-finder.ts';
@@ -37,11 +37,29 @@ const initialDataSchema = v.object({
  * outcome on the CRM, and posts the summary. Dispatch-only: there is no
  * route, and it cannot run without a batch.
  */
+/** JSON form of the run's mutable state, kept in usePersistentState. */
+interface PersistedRunState {
+	fetchedUrls: string[];
+	verifiedEmails: Record<string, { firstName: string | null; lastName: string | null; title: string | null; score: number; source: string }>;
+	research: ResearchSnapshot;
+	ledger: Record<string, LedgerEntry>;
+}
+
 export function Prospecting() {
 	useModel('openrouter/anthropic/claude-opus-5');
 	const run = useInitialData<v.InferOutput<typeof initialDataSchema>>();
 	const knowledge = loadKnowledge();
 	const sending = outreachEnabled();
+
+	// The agent re-renders on every model call, so the budget, ledger,
+	// fetched-URL evidence, and verified emails are hydrated from persisted
+	// state each render and written back (context.save) after every tool
+	// mutation. Without this, "this run" would silently mean "this turn".
+	const [savedState, setSavedState] = usePersistentState<PersistedRunState | null>('run-state', null);
+	const research = new ResearchBudget({ fetches: 4, searches: 3, lookups: hunterLookupsPerCompany() }, {}, savedState?.research);
+	const ledger = new OutreachLedger(dailyCap(), savedState?.ledger);
+	const fetchedUrls = new Set(savedState?.fetchedUrls ?? []);
+	const verifiedEmails = new Map(Object.entries(savedState?.verifiedEmails ?? {}));
 
 	const context: RunContext = {
 		runDate: run.runDate,
@@ -49,10 +67,17 @@ export function Prospecting() {
 		batch: run.batch,
 		knowledge,
 		crm: new Crm(),
-		ledger: new OutreachLedger(dailyCap()),
-		research: new ResearchBudget({ fetches: 4, searches: 3, lookups: hunterLookupsPerCompany() }),
-		fetchedUrls: new Set(),
-		verifiedEmails: new Map(),
+		ledger,
+		research,
+		fetchedUrls,
+		verifiedEmails,
+		save: () =>
+			setSavedState({
+				fetchedUrls: [...fetchedUrls],
+				verifiedEmails: Object.fromEntries(verifiedEmails),
+				research: research.snapshot(),
+				ledger: ledger.snapshot(),
+			}),
 		settings: {
 			outreachEnabled: sending,
 			dailyCap: dailyCap(),

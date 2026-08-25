@@ -1,11 +1,11 @@
 'use agent';
-import { useInitialData, useModel, useTool } from '@flue/runtime';
+import { useInitialData, useModel, usePersistentState, useTool } from '@flue/runtime';
 import * as v from 'valibot';
 import { loadKnowledge } from '../prospecting/business-docs.ts';
 import { cooldownDays, sourcingMaxCompanies } from '../prospecting/config.ts';
 import { Crm } from '../prospecting/crm.ts';
 import { OutreachLedger } from '../prospecting/ledger.ts';
-import { ResearchBudget } from '../prospecting/research-budget.ts';
+import { ResearchBudget, type ResearchSnapshot } from '../prospecting/research-budget.ts';
 import type { RunContext } from '../prospecting/run-context.ts';
 import type { SourcingCategory } from '../prospecting/sourcing-categories.ts';
 import { createCompany, postSourcingSummary, SOURCING_RESEARCH_KEY, sourcingBatchEntry, type SourcingState } from '../tools/hubspot-sourcing.ts';
@@ -29,13 +29,28 @@ const initialDataSchema = v.object({
  * create_company tool. It never contacts anyone — the prospecting run owns
  * outreach. Dispatch-only: no route, cannot run without a dispatch.
  */
+/** JSON form of the run's mutable state, kept in usePersistentState. */
+interface PersistedSourcingState {
+	fetchedUrls: string[];
+	research: ResearchSnapshot;
+	created: SourcingState['created'];
+}
+
 export function Sourcing() {
 	useModel('openrouter/anthropic/claude-opus-5');
 	const run = useInitialData<v.InferOutput<typeof initialDataSchema>>();
 	const knowledge = loadKnowledge();
 	const maxCompanies = sourcingMaxCompanies();
 
+	// The agent re-renders on every model call; the fetched-site evidence,
+	// the run budget, and the created-company list are hydrated from
+	// persisted state each render and written back after every mutation.
+	const [savedState, setSavedState] = usePersistentState<PersistedSourcingState | null>('run-state', null);
 	// One research key for the whole run: generous flat budget, no lookups.
+	const research = new ResearchBudget({ fetches: 14, searches: 8, lookups: 0 }, { extraAttempts: 6 }, savedState?.research);
+	const fetchedUrls = new Set(savedState?.fetchedUrls ?? []);
+	const state: SourcingState = { focus: run.focus as SourcingCategory, max: maxCompanies, created: savedState?.created ?? [] };
+
 	const context: RunContext = {
 		runDate: run.runDate,
 		now: () => new Date(),
@@ -43,9 +58,10 @@ export function Sourcing() {
 		knowledge,
 		crm: new Crm(),
 		ledger: new OutreachLedger(0),
-		research: new ResearchBudget({ fetches: 14, searches: 8, lookups: 0 }, { extraAttempts: 6 }),
-		fetchedUrls: new Set(),
+		research,
+		fetchedUrls,
 		verifiedEmails: new Map(),
+		save: () => setSavedState({ fetchedUrls: [...fetchedUrls], research: research.snapshot(), created: [...state.created] }),
 		settings: {
 			outreachEnabled: false,
 			dailyCap: 0,
@@ -55,8 +71,6 @@ export function Sourcing() {
 			templateId: () => 0,
 		},
 	};
-
-	const state: SourcingState = { focus: run.focus as SourcingCategory, max: maxCompanies, created: [] };
 
 	useTool(fetchPage(context));
 	useTool(webSearch(context));

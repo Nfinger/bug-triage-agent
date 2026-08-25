@@ -10,8 +10,16 @@ export class OutreachLedger {
 	private readonly entries = new Map<string, LedgerEntry>();
 	private readonly cap: number;
 
-	constructor(cap: number) {
+	constructor(cap: number, snapshot?: Record<string, LedgerEntry> | null) {
 		this.cap = cap;
+		if (snapshot) {
+			for (const [contactId, entry] of Object.entries(snapshot)) this.entries.set(contactId, { ...entry });
+		}
+	}
+
+	/** Plain-JSON form for usePersistentState: the agent re-renders every turn. */
+	snapshot(): Record<string, LedgerEntry> {
+		return Object.fromEntries([...this.entries.entries()].map(([contactId, entry]) => [contactId, { ...entry }]));
 	}
 
 	get sent(): number {

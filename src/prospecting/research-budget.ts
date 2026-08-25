@@ -7,8 +7,16 @@
  * try and is never given back — so a broken or hostile site cannot absorb
  * unlimited requests through refunds.
  */
+type UsedCounts = { fetches: number; searches: number; lookups: number; fetchAttempts: number; lookupAttempts: number };
+
+/** Plain-JSON form for usePersistentState: the agent re-renders every turn. */
+export interface ResearchSnapshot {
+	used: Record<string, UsedCounts>;
+	discoveryGranted: string[];
+}
+
 export class ResearchBudget {
-	private readonly used = new Map<string, { fetches: number; searches: number; lookups: number; fetchAttempts: number; lookupAttempts: number }>();
+	private readonly used = new Map<string, UsedCounts>();
 	private readonly discoveryGranted = new Set<string>();
 	private readonly baseLimits: { fetches: number; searches: number; lookups: number };
 	private readonly discoveryBonus: { fetches: number; searches: number };
@@ -17,10 +25,22 @@ export class ResearchBudget {
 	constructor(
 		limits: { fetches: number; searches: number; lookups?: number } = { fetches: 4, searches: 3 },
 		options: { discoveryBonus?: { fetches: number; searches: number }; extraAttempts?: number } = {},
+		snapshot?: ResearchSnapshot | null,
 	) {
 		this.baseLimits = { ...limits, lookups: limits.lookups ?? 2 };
 		this.discoveryBonus = options.discoveryBonus ?? { fetches: 3, searches: 2 };
 		this.extraAttempts = options.extraAttempts ?? 4;
+		if (snapshot) {
+			for (const [companyId, counts] of Object.entries(snapshot.used)) this.used.set(companyId, { ...counts });
+			for (const companyId of snapshot.discoveryGranted) this.discoveryGranted.add(companyId);
+		}
+	}
+
+	snapshot(): ResearchSnapshot {
+		return {
+			used: Object.fromEntries([...this.used.entries()].map(([companyId, counts]) => [companyId, { ...counts }])),
+			discoveryGranted: [...this.discoveryGranted],
+		};
 	}
 
 	private entry(companyId: string) {

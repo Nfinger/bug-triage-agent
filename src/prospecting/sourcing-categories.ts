@@ -16,7 +16,7 @@ export interface SourcingCategory {
 export const SOURCING_CATEGORIES: SourcingCategory[] = [
 	{
 		key: 'wedding-event-venues',
-		description: 'wedding and event venues: barns, estates, banquet halls, function rooms, event farms',
+		description: 'wedding and event venues (barns, estates, banquet halls, function rooms, event farms) and the event planners and coordinators who book them',
 		industries: ['EVENTS_SERVICES', 'HOSPITALITY', 'ENTERTAINMENT'],
 	},
 	{

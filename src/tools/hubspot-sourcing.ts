@@ -94,6 +94,7 @@ export function createCompany(context: RunContext, state: SourcingState) {
 				);
 				if (!note.ok) log.warn('sourcing note not created', { companyId: created.data.id, error: note.error });
 				state.created.push({ companyId: created.data.id, name: data.name, domain, industry: data.industry.toUpperCase() });
+				context.save?.();
 				log.info('company sourced', { companyId: created.data.id, domain, category: state.focus.key });
 				return { output: { ok: true, companyId: created.data.id, domain, created: state.created.length, remaining: state.max - state.created.length } };
 			} catch (error) {

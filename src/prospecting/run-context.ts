@@ -34,6 +34,13 @@ export interface RunContext {
 	 * second evidence path.
 	 */
 	verifiedEmails: Map<string, { firstName: string | null; lastName: string | null; title: string | null; score: number; source: string }>;
+	/**
+	 * Persist the run's mutable state (fetchedUrls, verifiedEmails, budget,
+	 * ledger) via the agent's usePersistentState. The agent re-renders on
+	 * every model call, so anything not saved here is forgotten between
+	 * turns. Tools MUST call this after mutating shared state.
+	 */
+	save?: () => void;
 	settings: {
 		outreachEnabled: boolean;
 		dailyCap: number;

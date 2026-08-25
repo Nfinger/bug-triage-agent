@@ -81,6 +81,7 @@ export function listEligibleContacts(context: RunContext) {
 				let discovery: string | null = null;
 				if (evaluation.data.eligible.length === 0) {
 					context.research.grantDiscoveryBonus(data.companyId);
+					context.save?.();
 					discovery =
 						'No eligible contacts: discovery research budget granted. Research the company site (team/about/staff/leadership/contact pages) and search for a named person in a target persona with an email on the company domain, then create_contact if you find one.';
 				}

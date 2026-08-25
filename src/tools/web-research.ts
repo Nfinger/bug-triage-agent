@@ -40,6 +40,7 @@ export function fetchPage(context: RunContext, doFetch: typeof fetch = fetch) {
 				return { output: { ok: false, error: `Fetch attempt cap reached for company ${data.companyId}: no more page requests this run, successful or not. Proceed with what you have.` } };
 			}
 			if (!context.research.take(data.companyId, 'fetches')) {
+				context.save?.();
 				return { output: { ok: false, error: `Research budget spent: no page fetches left for company ${data.companyId}. Proceed with what you have.` } };
 			}
 			const page = await fetchPageText(data.url, doFetch);
@@ -47,6 +48,7 @@ export function fetchPage(context: RunContext, doFetch: typeof fetch = fetch) {
 				// A page you never got shouldn't cost the budget; the attempt
 				// charge above still bounds how often a failing site is retried.
 				context.research.refund(data.companyId, 'fetches');
+				context.save?.();
 				const remaining = context.research.remaining(data.companyId);
 				return {
 					output: {
@@ -59,6 +61,7 @@ export function fetchPage(context: RunContext, doFetch: typeof fetch = fetch) {
 			// trailing-slash/www variations.
 			context.fetchedUrls.add(canonicalUrl(page.url));
 			context.fetchedUrls.add(canonicalUrl(page.finalUrl));
+			context.save?.();
 			return {
 				output: {
 					ok: true,
@@ -92,6 +95,7 @@ export function webSearch(context: RunContext, provider?: SearchProvider) {
 			if (!context.research.take(data.companyId, 'searches')) {
 				return { output: { ok: false, error: `Research budget spent: no searches left for company ${data.companyId}. Proceed with what you have.` } };
 			}
+			context.save?.();
 			const result = await search.search(data.query, MAX_SEARCH_RESULTS);
 			if (!result.ok) return { output: result };
 			return {

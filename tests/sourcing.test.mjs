@@ -126,6 +126,31 @@ test('the wrong-host case names the mismatch when both pages were fetched', asyn
 	assert.equal(writes.length, 0);
 });
 
+test('run state survives a re-render: evidence fetched in one render is honored in the next', async () => {
+	// Simulates Flue's per-turn re-render: render 1 fetches and saves; render 2
+	// hydrates from the persisted snapshot and must accept the evidence.
+	const { fetchPage } = await import('../src/tools/web-research.ts');
+	let persisted = null;
+
+	const renderOne = sourcingContext({ crm: scriptedCrm().crm });
+	renderOne.save = () => {
+		persisted = { fetchedUrls: [...renderOne.fetchedUrls], research: renderOne.research.snapshot() };
+	};
+	const doFetch = async () => new Response('<html><title>Barn</title><body><p>Harvest Barn, Maine</p></body></html>', { status: 200, headers: { 'content-type': 'text/html' } });
+	const fetched = await fetchPage(renderOne, doFetch).run({ data: { companyId: 'sourcing-run', url: 'https://harvestbarn.me/weddings' }, log });
+	assert.equal(fetched.output.ok, true);
+	assert.ok(persisted, 'fetch must persist the run state');
+
+	const { crm: crmTwo, writes } = scriptedCrm();
+	const renderTwo = sourcingContext({ crm: crmTwo });
+	renderTwo.fetchedUrls = new Set(persisted.fetchedUrls);
+	renderTwo.research = new ResearchBudget({ fetches: 4, searches: 3 }, {}, persisted.research);
+	assert.equal(renderTwo.research.remaining('sourcing-run').fetches, 3, 'the spent fetch must survive the re-render');
+	const result = await createCompany(renderTwo, { focus, max: 5, created: [] }).run({ data: goodInput, log });
+	assert.equal(result.output.ok, true, JSON.stringify(result.output));
+	assert.ok(writes.some((write) => write.kind === 'company'));
+});
+
 test('duplicates are refused and the cap is enforced in code', async () => {
 	const dup = scriptedCrm({ existingDomains: ['harvestbarn.me'] });
 	const dupTool = createCompany(sourcingContext({ crm: dup.crm, fetched: ['https://harvestbarn.me/weddings'] }), { focus, max: 5, created: [] });

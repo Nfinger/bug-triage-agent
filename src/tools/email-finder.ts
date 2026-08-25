@@ -52,11 +52,13 @@ export function findContactEmail(context: RunContext, client?: HunterClient) {
 				return { output: { ok: false, error: `Lookup attempt cap reached for company ${data.companyId} — the provider may be down; stop retrying and proceed with what you have.` } };
 			}
 			if (!context.research.take(data.companyId, 'lookups')) {
+				context.save?.();
 				return { output: { ok: false, error: `Lookup budget spent for company ${data.companyId}. Proceed with what you have.` } };
 			}
 			const key = hunterApiKey();
 			if (!key && !client) {
 				context.research.refund(data.companyId, 'lookups');
+				context.save?.();
 				return { output: { ok: false, error: 'Email lookups are not configured (HUNTER_API_KEY unset)' } };
 			}
 			const hunter = client ?? new HunterClient(key as string);
@@ -67,6 +69,7 @@ export function findContactEmail(context: RunContext, client?: HunterClient) {
 			if (!lookup.ok) {
 				// A provider failure shouldn't cost credits the run never spent.
 				context.research.refund(data.companyId, 'lookups');
+				context.save?.();
 				return { output: lookup };
 			}
 			const minScore = hunterMinScore();
@@ -85,6 +88,7 @@ export function findContactEmail(context: RunContext, client?: HunterClient) {
 				}
 				return { ...found, verified };
 			});
+			context.save?.();
 			return {
 				output: {
 					ok: true,

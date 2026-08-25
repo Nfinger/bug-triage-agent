@@ -80,6 +80,7 @@ export function sendOutreachEmail(context: RunContext) {
 
 			const now = context.now();
 			context.ledger.reserve(data.contactId, now);
+			context.save?.();
 
 			const holdReason = !context.settings.outreachEnabled
 				? ('outreach-disabled' as const)
@@ -94,9 +95,11 @@ export function sendOutreachEmail(context: RunContext) {
 				);
 				if (!note.ok) {
 					context.ledger.release(data.contactId);
+				context.save?.();
 					return { output: { ok: false, error: `Could not store the draft note: ${note.error}` } };
 				}
 				context.ledger.settle(data.contactId, 'drafted');
+				context.save?.();
 				log.info('outreach drafted, not sent', { contactId: data.contactId, reason: holdReason });
 				return { output: { ok: true, sent: false, reason: holdReason, contactId: data.contactId, draftNoteId: note.data.id } };
 			}
@@ -117,9 +120,11 @@ export function sendOutreachEmail(context: RunContext) {
 					return { output: { ok: false, uncertain: true, contactId: data.contactId, error: `Send outcome unknown (${result.error}); do NOT retry` } };
 				}
 				context.ledger.release(data.contactId);
+				context.save?.();
 				return { output: { ok: false, error: result.error } };
 			}
 			context.ledger.settle(data.contactId, 'sent');
+			context.save?.();
 			log.info('outreach email sent', { contactId: data.contactId, to: contact.email, company: company.name });
 			return { output: { ok: true, sent: true, contactId: data.contactId, to: contact.email, sentThisRun: context.ledger.sent } };
 		},

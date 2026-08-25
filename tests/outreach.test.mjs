@@ -186,3 +186,13 @@ test('a rejected send releases the contact so the model can report it, and nothi
 	assert.equal(ctx.ledger.has('k1'), undefined);
 	assert.equal(writes.length, 1);
 });
+
+test('ledger state survives a re-render via snapshot/hydrate', () => {
+	const first = new OutreachLedger(5);
+	first.reserve('k1', NOW);
+	first.settle('k1', 'sent');
+	const second = new OutreachLedger(5, first.snapshot());
+	assert.equal(second.has('k1').status, 'sent');
+	assert.equal(second.reserve('k1', NOW), false, 'a sent contact must stay consumed across renders');
+	assert.equal(second.sent, 1);
+});
