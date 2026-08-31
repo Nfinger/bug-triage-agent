@@ -26,6 +26,14 @@ test('the checked-in business docs parse', async () => {
 	assert.ok(matchers.some((m) => m.test('HR Director')));
 });
 
+test('the checked-in voice rules require a direct proposal instead of an inferred story', async () => {
+	const knowledge = parseKnowledge(await realDocs());
+
+	assert.match(knowledge.prose, /State the idea in the first sentence/);
+	assert.match(knowledge.prose, /Do not combine research facts into an invented conclusion/);
+	assert.match(knowledge.prose, /Lawn games could give guests something to do between the ceremony and reception/);
+});
+
 test('the checked-in voice rules reject generic cold-email language', async () => {
 	const knowledge = parseKnowledge(await realDocs());
 	const problems = lintMessage(
