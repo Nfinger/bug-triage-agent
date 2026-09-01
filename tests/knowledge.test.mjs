@@ -26,13 +26,20 @@ test('the checked-in business docs parse', async () => {
 	assert.ok(matchers.some((m) => m.test('HR Director')));
 });
 
-test('the checked-in voice rules require a prospect-specific hook with a selling point', async () => {
+test('the checked-in voice rules make a relevant proposal without explaining the prospect’s business to them', async () => {
 	const knowledge = parseKnowledge(await realDocs());
 
-	assert.match(knowledge.prose, /Lead with a prospect-specific reason to care/);
-	assert.match(knowledge.prose, /Connect a real detail to a concrete benefit/);
-	assert.match(knowledge.prose, /Mountain Star has nine acres to make cocktail hour feel like part of the wedding/);
-	assert.match(knowledge.prose, /Do not use generic observations such as "lawn games could give guests something to do/);
+	assert.match(knowledge.prose, /Use research to choose a relevant proposal, not to summarize or interpret the prospect’s business/);
+	assert.match(knowledge.prose, /Stay in Matt’s lane/);
+	assert.match(knowledge.prose, /if \[venue\] ever wants lawn games for cocktail hour/);
+	assert.doesNotMatch(knowledge.prose, /Mountain Star has nine acres to make cocktail hour feel like part of the wedding/);
+});
+
+test('the agent asks research to select the offer rather than narrate the prospect back to them', async () => {
+	const source = await readFile(new URL('../src/agents/prospecting.ts', import.meta.url), 'utf8');
+
+	assert.match(source, /Use research to choose the relevant proposal; do not repeat or interpret facts about the prospect/);
+	assert.doesNotMatch(source, /one specific, true thing about them/);
 });
 
 test('the checked-in voice rules reject generic cold-email language', async () => {
