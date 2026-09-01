@@ -96,6 +96,21 @@ test('lint rejects over-length, banned phrases, HTML, and unfetched evidence at 
 	assert.deepEqual(lintMessage({ ...message, evidence: ['hubspot:recent_conversion_event_name'] }, messaging, new Set()), []);
 });
 
+test('lint rejects punctuation that breaks the owner-to-owner voice', () => {
+	const problems = lintMessage(
+		{
+			...message,
+			subject: 'A lawn game idea!',
+			body: 'Jane, I saw the summer series on your site — it looks like a good fit for a few lawn games. Worth a conversation? Nate',
+		},
+		messaging,
+		new Set(['acme.io/about']),
+	);
+
+	assert.ok(problems.includes('do not use exclamation marks'));
+	assert.ok(problems.includes('do not use em dashes'));
+});
+
 test('a clean message to an eligible contact is sent once through single-send, to the record address', async () => {
 	const { client, writes } = scriptedHubspot({ contacts: [jane] });
 	const ctx = context({ crm: new Crm(client) });

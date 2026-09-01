@@ -30,6 +30,8 @@ export function lintMessage(draft: MessageDraft, rules: MessagingRules, fetchedU
 	for (const phrase of rules.bannedPhrases) {
 		if (haystack.includes(phrase.toLowerCase())) problems.push(`contains banned phrase "${phrase}"`);
 	}
+	if (/[!！]/.test(`${draft.subject}\n${draft.body}`)) problems.push('do not use exclamation marks');
+	if (/—/.test(`${draft.subject}\n${draft.body}`)) problems.push('do not use em dashes');
 	if (/<[a-z][^>]*>/i.test(draft.body)) problems.push('body must be plain text, not HTML');
 	if (/unsubscribe/i.test(draft.body)) problems.push('do not write an unsubscribe line; the template adds it');
 	if (draft.evidence.length === 0) {
